@@ -1,0 +1,71 @@
+# roadmap.yaml — Product roadmap (plan layer)
+#
+# Owned by: wf-skill-strategist
+# Default path: paths.roadmap (default .workflow/roadmap.yaml)
+#
+# Persistent, git-tracked. Authored interactively in /wf-skill-strategist sessions.
+# Downstream consumers:
+#   - wf-skill-sa (roadmap mode) — SYS-REQs/REQs trace to capability ids via traces_to.
+#                                  External constraints become type: inherited-constraint REQs.
+#   - wf-skill-arbitrator-review — validates that traces_to references resolve here.
+#
+# ID namespaces (each monotonic over the roadmap's lifetime; never renumber on removal):
+#   CAP-NNN   capabilities (user-voice statements of what the user/operator/external system can do)
+#   EXT-NNN   external constraints (binding mandates: tech / policy / regulation with no alternatives)
+#   OOS-NNN   out-of-scope items (explicitly excluded)
+#   OPQ-NNN   open questions (block roadmap-mode planning until resolved)
+#   DEF-NNN   deferred items (capabilities parked for later with a revisit trigger)
+
+version: 1
+last_updated: "YYYY-MM-DD"
+updated_by: "strategist"
+
+# Capabilities — user-voice statements of what the user/operator/external system can do.
+# Never reference components, libraries, or implementation patterns here.
+capabilities:
+  - id: "CAP-001"
+    statement: "Field engineers can search past inspections by date and asset id."
+    value: "Saves ~10 min per site visit; current workaround is paper logs."
+    priority: high                 # high | medium | low
+    status: "planned"              # planned | in_progress | done | deferred
+    depends_on: []                 # other CAP-NNN this capability depends on
+    notes: ""                      # context from the conversation
+    # Amendment-mode fields (only set when a CAP supersedes a previous one):
+    # supersedes: ["CAP-NNN"]
+    # superseded_by: "CAP-NNN"
+
+  - id: "CAP-002"
+    statement: "Admins can see who changed what and when on any asset."
+    value: "Compliance audit requirement; quarterly review currently manual."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-001"]
+    notes: ""
+
+# External constraints — non-negotiable mandates from outside the design process.
+# Each entry becomes a type: inherited-constraint REQ in COMPONENTS.yaml downstream.
+# Only include when the user has a genuine external mandate, not a personal preference.
+external_constraints:
+  - id: "EXT-001"
+    statement: "Authentication must use the company OAuth provider."
+    reason: "Corporate IdP only supports OAuth; no in-house auth permitted."
+    source: "IT / security policy"
+
+# Out of scope — things explicitly excluded. Surfacing exclusions prevents scope creep.
+out_of_scope:
+  - id: "OOS-001"
+    statement: "Mobile-native apps."
+    reason: "Field engineers already carry rugged laptops; no business case for mobile."
+
+# Open questions — items that block scoping decisions until resolved.
+open_questions:
+  - id: "OPQ-001"
+    statement: "Does the audit trail need to be tamper-evident (cryptographic chain) or just append-only?"
+    blocks: ["CAP-002"]            # CAP-NNN ids that depend on resolution
+
+# Deferred — capabilities parked for later with a revisit trigger.
+deferred:
+  - id: "DEF-001"
+    statement: "Bulk import from legacy asset register."
+    reason: "Legacy system retires Q4 2026; reassess once replacement is chosen."
+    revisit: "After CAP-001 ships and legacy retirement date is confirmed."
