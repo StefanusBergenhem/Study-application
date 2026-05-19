@@ -1,15 +1,1444 @@
 # COMPONENTS.yaml — Component registry and architecture governance
-# Place this file in the project root.
 # Maintained by the Solution Architect (/wf-skill-sa).
 
+version: 1
+last_updated: "2026-05-19"
+updated_by: "sa"
+
+# ── System Requirements (Tier 1) ────────────────────────────────────────────
+
 system_requirements:
-  # SYS-REQ-NNN — user-visible behavior, cross-cutting NFRs, system-wide invariants
+  # ── External constraint ──
+  - id: SYS-REQ-001
+    type: inherited-constraint
+    statement: "The system shall deploy on Railway Hobby tier, respecting its RAM
+      (512 MB), CPU, and concurrency limits. No persistent data may be stored on
+      the app container's ephemeral filesystem."
+    allocated_to: [database]
+    traces_to: [EXT-001]
+
+  # ── Auth ──
+  - id: SYS-REQ-002
+    type: functional
+    statement: "When a visitor submits registration with a valid email and
+      password, the system shall create an account and establish an authenticated
+      session within 2 seconds."
+    acceptance_criteria:
+      - "Valid email + password → 201 Created, session cookie set, User record persisted."
+      - "Duplicate email → 409 Conflict, no session, no second User record."
+      - "Malformed email → 422 Unprocessable, descriptive error, no account created."
+      - "End-to-end latency (form submit → session established) ≤ 2s p95."
+    allocated_to: [auth]
+    traces_to: [CAP-013]
+
+  - id: SYS-REQ-003
+    type: functional
+    statement: "When a user submits credentials, the system shall establish an
+      authenticated session within 500ms p95; when credentials are invalid, the
+      system shall reject with a non-revealing error message."
+    acceptance_criteria:
+      - "Valid email + password → 200 OK, session cookie set."
+      - "Wrong password → 401 Unauthorized, generic message 'Invalid email or password', no session."
+      - "Unknown email → 401 Unauthorized, same generic message, timing indistinguishable from wrong-password path."
+      - "End-to-end latency (form submit → response) ≤ 500ms p95."
+    allocated_to: [auth]
+    traces_to: [CAP-014]
+
+  - id: SYS-REQ-004
+    type: invariant
+    statement: "While any user is authenticated, the system shall prevent that
+      user from accessing another user's cards, libraries, SR state, API tokens,
+      or mind maps."
+    acceptance_criteria:
+      - "Every data-fetching endpoint scopes its query to the authenticated user's id."
+      - "No endpoint accepts a user_id parameter from the request — identity is taken from the session only."
+      - "Attempting to access another user's resource by ID returns 404 (not 403) to avoid information leakage."
+    allocated_to: [auth]
+    traces_to: [CAP-014]
+
+  # ── Cards ──
+  - id: SYS-REQ-005
+    type: functional
+    statement: "When a user submits a new card with a rich-text front and back,
+      the system shall persist it and make it immediately available for library
+      assignment and study scheduling."
+    acceptance_criteria:
+      - "Valid front + back → 201 Created, Card persisted with generated id."
+      - "Empty front → 422 Unprocessable, card not persisted."
+      - "Empty back → 422 Unprocessable, card not persisted."
+      - "Card appears in library assignment picker and study due-cards query immediately after creation."
+    allocated_to: [cards]
+    traces_to: [CAP-002, CAP-008]
+
+  - id: SYS-REQ-006
+    type: functional
+    statement: "When a user submits a structured file (CSV or JSON) containing
+      card data, the system shall parse, validate, and bulk-create cards,
+      reporting per-row success or failure without aborting the entire batch."
+    acceptance_criteria:
+      - "Valid CSV with 3 rows → 3 cards created, response lists 3 success entries."
+      - "CSV with 1 valid row and 1 row missing 'back' → 1 card created, 1 error entry with row index and reason."
+      - "Empty file → 422 Unprocessable, zero cards created."
+      - "Malformed JSON → 422 Unprocessable, descriptive parse error."
+    allocated_to: [cards]
+    traces_to: [CAP-009, CAP-010]
+
+  - id: SYS-REQ-007
+    type: functional
+    statement: "When a user enters a text query, the system shall return cards
+      whose front or back content contains a case-insensitive match, scoped to
+      that user's cards only."
+    acceptance_criteria:
+      - "Query 'mitochondria' matches card with front 'Mitochondria function'."
+      - "Query matches partial words (substring) in both front and back fields."
+      - "Empty query → 200 OK, empty result set (not an error)."
+      - "Results exclude cards belonging to other users."
+    allocated_to: [cards]
+    traces_to: [CAP-020]
+
+  # ── Libraries ──
+  - id: SYS-REQ-008
+    type: functional
+    statement: "When a user creates a named library, the system shall persist it
+      and allow cards to be associated with it. When a user removes a card from
+      a library, the system shall not alter that card's SR state."
+    acceptance_criteria:
+      - "Create library → 201 Created, Library persisted with user_id."
+      - "Add card to library → card appears in library listing, SR state unchanged."
+      - "Remove card from library → card removed from membership, SR state unchanged."
+    allocated_to: [libraries]
+    traces_to: [CAP-004, CAP-006]
+
+  - id: SYS-REQ-009
+    type: functional
+    statement: "When a user associates a card with multiple libraries, the system
+      shall maintain a single canonical Card record — the card's content and SR
+      state are shared across all library memberships."
+    acceptance_criteria:
+      - "Add card C to Library A and Library B → both listings include C, only one Card row exists."
+      - "Edit card C content → updated content visible in both Library A and Library B."
+      - "Review card C in a Library A session → SR state update visible when studying Library B."
+    allocated_to: [libraries]
+    traces_to: [CAP-005]
+
+  - id: SYS-REQ-010
+    type: invariant
+    statement: "The system shall represent library membership as a many-to-many
+      relationship between Card and Library. SR state is keyed on (user_id, card_id),
+      never on (user_id, library_id, card_id). Removing a card from a library
+      removes the membership row only."
+    acceptance_criteria:
+      - "LibraryMembership table is a junction table with (library_id, card_id) — no SR columns."
+      - "SRState table has no library_id column."
+      - "DELETE FROM library_memberships WHERE card_id = X does not affect SRState rows."
+    allocated_to: [libraries]
+    traces_to: [CAP-005, CAP-006]
+
+  # ── Study ──
+  - id: SYS-REQ-011
+    type: functional
+    statement: "When a user starts a study session scoped to a library, the
+      system shall present due cards one at a time — showing the front, awaiting
+      a flip, then accepting a recall rating (again/hard/good/easy) to schedule
+      the next review — and advance to the next due card."
+    acceptance_criteria:
+      - "Session returns only active cards in the specified library whose next_review_at ≤ now."
+      - "Rating 'good' advances next_review_at by the computed interval and increases ease factor."
+      - "Rating 'again' resets interval to 1 day and sets next_review_at to now (re-queue)."
+      - "After all due cards reviewed → session complete signal."
+    allocated_to: [study]
+    traces_to: [CAP-001]
+
+  - id: SYS-REQ-012
+    type: functional
+    statement: "While a study session is active, the system shall display
+      real-time counts: cards due today, cards reviewed this session, cards
+      remaining."
+    acceptance_criteria:
+      - "Counts update after each rating — reviewed increments, remaining decrements."
+      - "Due-today count is pre-computed at session start and does not change mid-session."
+    allocated_to: [study]
+    traces_to: [CAP-003]
+
+  - id: SYS-REQ-013
+    type: functional
+    statement: "When a user views their study stats, the system shall show cards
+      studied today, the current consecutive-day streak, and total cards in
+      circulation. When a user views a card's history, the system shall show its
+      last reviewed date, success rate, and next review date."
+    acceptance_criteria:
+      - "Streak increments daily when ≥1 card reviewed; resets to 0 on a missed day."
+      - "Card success rate = (count of good+easy) / total reviews."
+      - "Per-card history endpoint returns last_reviewed_at, success_rate, next_review_at for the given card."
+    allocated_to: [study]
+    traces_to: [CAP-016, CAP-018]
+
+  - id: SYS-REQ-014
+    type: invariant
+    statement: "The system shall maintain exactly one SR state record per
+      (user_id, card_id). When card content is edited, the SR record shall be
+      reset to initial values as if the card were newly created."
+    acceptance_criteria:
+      - "SELECT COUNT(*) FROM sr_state WHERE user_id = X AND card_id = Y returns 0 or 1."
+      - "Edit card content → interval_days reset to 1, ease_factor reset to 2.5, repetitions reset to 0, next_review_at reset to now."
+      - "Edit card metadata (not content) → SR state unchanged."
+    allocated_to: [cards, study]
+    traces_to: [CAP-005, CAP-006, REQ-CRD-002]
+
+  # ── Export ──
+  - id: SYS-REQ-015
+    type: functional
+    statement: "When a user requests an export, the system shall produce a
+      structured JSON file containing all their cards (front, back, images,
+      created date) and per-card SR state (ease factor, interval, next review,
+      review history) as a single downloadable artifact."
+    acceptance_criteria:
+      - "Export response Content-Type is application/json, Content-Disposition: attachment."
+      - "JSON includes all cards belonging to the authenticated user."
+      - "JSON includes per-card SR state for every card that has been reviewed."
+      - "JSON excludes cards and SR state belonging to other users."
+    allocated_to: [export]
+    traces_to: [CAP-019]
+
+  # ── API Tokens ──
+  - id: SYS-REQ-016
+    type: functional
+    statement: "When a user generates a personal API token, the system shall
+      create a bearer token that authenticates external requests as that user.
+      The user may list, revoke, and regenerate their tokens."
+    acceptance_criteria:
+      - "Generate token → returns token value once (not stored in plaintext; hash stored)."
+      - "List tokens → returns token metadata (id, label, created_at, last_used_at) without token values."
+      - "Revoke token → token no longer authenticates requests."
+      - "Regenerate → new token value, old token invalidated."
+    allocated_to: [api-tokens]
+    traces_to: [CAP-011]
+
+  - id: SYS-REQ-017
+    type: functional
+    statement: "When an external caller submits a card via the REST API with a
+      valid personal token and a target library id, the system shall create the
+      card in the token owner's account and assign it to the specified library."
+    acceptance_criteria:
+      - "Valid token + valid library_id (belonging to token owner) → 201 Created, card created and assigned."
+      - "Invalid/expired/revoked token → 401 Unauthorized."
+      - "Valid token + library_id belonging to a different user → 404 Not Found (not 403)."
+      - "Valid token + missing front/back → 422 Unprocessable."
+    allocated_to: [api-tokens]
+    traces_to: [CAP-012]
+
+  # ── Mind Maps ──
+  - id: SYS-REQ-018
+    type: functional
+    statement: "When a user opens the mind map section, the system shall present
+      a blank canvas where they can place, move, and edit text notes. The user
+      may save, load, and delete their mind maps."
+    acceptance_criteria:
+      - "Save new mind map → persisted with user_id and map data."
+      - "Load mind map → returns map data including all node positions and text content."
+      - "Delete mind map → map and all its nodes removed."
+      - "Load mind map belonging to another user → 404 Not Found."
+    allocated_to: [mindmaps]
+    traces_to: [CAP-021, CAP-022, CAP-023]
+
+  # ── Platform ──
+  - id: SYS-REQ-019
+    type: nfr
+    statement: "While rendering any screen, the system shall present legible
+      content and touch-operable controls on viewports from 320px to 2560px
+      wide, with touch targets at least 44×44 CSS pixels on viewports ≤ 768px
+      wide."
+    allocated_to: [ui]
+    traces_to: [CAP-024]
+    nfr_elements:
+      subject: "UI responsiveness across viewport sizes"
+      metric: "CSS pixels — minimum touch target size, minimum viewport width for legibility"
+      threshold: "touch targets ≥ 44×44px on viewports ≤ 768px; no horizontal scroll at ≥ 320px"
+      condition: "all screens"
+      source: "WCAG 2.1 target size (AAA) + phone-first constraint"
+
+# ── Components ───────────────────────────────────────────────────────────────
 
 components:
-  # Component definitions with EARS requirements, DbC exposes, and governance
+
+  # ── Auth ───────────────────────────────────────────────────────────────────
+  auth:
+    path: src/auth/
+    requirements:
+      - id: REQ-AUTH-001
+        type: functional
+        statement: "When given a valid email and password for a new account, the
+          system shall create a User record with a hashed password and return a
+          session."
+        acceptance_criteria:
+          - "Email not already registered → User created, password bcrypt/argon2-hashed, session established."
+          - "Email already registered → AuthDuplicateUserError, no new User, no session."
+          - "Email missing @ → AuthInvalidEmailError."
+          - "Password < 8 characters → AuthWeakPasswordError."
+        derives_from: [SYS-REQ-002]
+        traces_to: [CAP-013]
+
+      - id: REQ-AUTH-002
+        type: functional
+        statement: "When given an email and password for an existing account, the
+          system shall verify the password against the stored hash and return a
+          session on match; on mismatch or unknown email, the system shall return
+          a generic AuthInvalidCredentialsError with indistinguishable timing."
+        acceptance_criteria:
+          - "Correct password → session established, 200 OK."
+          - "Wrong password → AuthInvalidCredentialsError, no session."
+          - "Unknown email → AuthInvalidCredentialsError (same message and timing)."
+        derives_from: [SYS-REQ-003]
+        traces_to: [CAP-014]
+
+      - id: REQ-AUTH-003
+        type: functional
+        statement: "When given a valid session token, the system shall invalidate
+          the session so it can no longer authenticate requests."
+        acceptance_criteria:
+          - "Valid session token → session deleted, subsequent use returns AuthSessionExpiredError."
+          - "Already-expired or nonexistent token → no error (idempotent)."
+        traces_to: [CAP-014]
+
+      - id: REQ-AUTH-004
+        type: functional
+        statement: "When a user requests a password reset for a registered email,
+          the system shall send a one-time reset link to that email. The link
+          shall expire after a fixed window."
+        acceptance_criteria:
+          - "Registered email → reset email sent, 200 OK."
+          - "Unregistered email → 200 OK, no email sent (anti-enumeration)."
+          - "Valid reset token → password updated, all existing sessions invalidated."
+          - "Expired reset token → AuthResetTokenExpiredError."
+        traces_to: [CAP-015]
+
+      - id: REQ-AUTH-005
+        type: nfr
+        statement: "The system shall store passwords using a memory-hard hashing
+          algorithm (bcrypt with cost ≥ 12 or argon2id) and shall never log or
+          serialize plaintext passwords."
+        nfr_elements:
+          subject: "password storage security"
+          metric: "hashing algorithm and cost factor"
+          threshold: "bcrypt cost ≥ 12 OR argon2id with t=2, m=65536, p=1"
+          condition: "all password storage and verification paths"
+          source: "OWASP Password Storage Cheat Sheet"
+        traces_to: [CAP-013]
+
+      - id: REQ-AUTH-006
+        type: data
+        statement: "The system shall define a canonical User model with fields:
+          id (UUID), email (string, unique), password_hash (string), created_at
+          (timestamp), updated_at (timestamp)."
+        acceptance_criteria:
+          - "User struct is defined once in src/auth/ and imported by every component needing user identity."
+          - "User is JSON-serialisable with stable camelCase field names."
+        derives_from: [SYS-REQ-004]
+        traces_to: [CAP-013]
+    exposes:
+      - name: AuthService.register
+        signature:
+          parameters:
+            - { name: email, type: string }
+            - { name: password, type: string }
+          return_type: "(User, Session, error)"
+        preconditions:
+          - "email is a non-empty string containing '@'."
+          - "password is a non-empty string of length ≥ 8."
+        postconditions:
+          on_success:
+            - "Returns a User with a newly-generated UUID id."
+            - "User.password_hash is a bcrypt/argon2id hash of the supplied password."
+            - "Session carries a cryptographically random token and an expiry."
+          on_AuthDuplicateUserError:
+            - "email is already registered; no new User or Session created."
+          on_AuthInvalidEmailError:
+            - "email does not contain '@'."
+          on_AuthWeakPasswordError:
+            - "password length < 8."
+        invariants: []
+        typed_errors:
+          - { name: AuthDuplicateUserError, when: "email is already registered." }
+          - { name: AuthInvalidEmailError, when: "email format is invalid (no '@')." }
+          - { name: AuthWeakPasswordError, when: "password length < 8 characters." }
+        style: tolerant
+
+      - name: AuthService.login
+        signature:
+          parameters:
+            - { name: email, type: string }
+            - { name: password, type: string }
+          return_type: "(User, Session, error)"
+        preconditions:
+          - "email is a non-empty string."
+          - "password is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns the User matching the supplied email."
+            - "Session is newly issued with a cryptographically random token."
+          on_AuthInvalidCredentialsError:
+            - "email is unknown OR password does not match stored hash."
+            - "Response timing is constant regardless of which condition triggered."
+        invariants: []
+        typed_errors:
+          - { name: AuthInvalidCredentialsError, when: "email unknown or password mismatch." }
+        style: tolerant
+
+      - name: AuthService.logout
+        signature:
+          parameters:
+            - { name: sessionToken, type: string }
+          return_type: void
+        style: tolerant
+
+      - name: AuthService.validateSession
+        signature:
+          parameters:
+            - { name: token, type: string }
+          return_type: "(User, error)"
+        preconditions:
+          - "token is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns the User whose active session matches the token."
+          on_AuthSessionExpiredError:
+            - "token is valid but past its expiry."
+          on_AuthSessionInvalidError:
+            - "token does not match any active session."
+        invariants: []
+        typed_errors:
+          - { name: AuthSessionExpiredError, when: "valid token past its expiry." }
+          - { name: AuthSessionInvalidError, when: "token does not match any active session." }
+        style: tolerant
+
+      - name: AuthService.requestPasswordReset
+        signature:
+          parameters:
+            - { name: email, type: string }
+          return_type: void
+        preconditions:
+          - "email is a non-empty string."
+        postconditions:
+          on_success:
+            - "If email is registered: reset token created and email sent. Returns 200 OK."
+            - "If email is not registered: no token created, no email sent. Returns 200 OK (anti-enumeration: timing indistinguishable)."
+        invariants: []
+        style: tolerant
+
+      - User
+      - Session
+    depends_on: [database]
+    constraints:
+      max_source_files: 15
+      max_exported_symbols: 12
+    status: OK
+    # ADR-004 is proposed pending OPQ-003 resolution; trace is speculative.
+    governed_by_adrs: [ADR-001, ADR-002, ADR-004]
+
+  # ── Cards ──────────────────────────────────────────────────────────────────
+  cards:
+    path: src/cards/
+    requirements:
+      - id: REQ-CRD-001
+        type: functional
+        statement: "When given a rich-text front, rich-text back, and optional
+          image attachments, the system shall create a Card owned by the
+          specified user."
+        acceptance_criteria:
+          - "Valid front + back → Card created with generated UUID, user_id set, timestamps set."
+          - "Empty front → CardValidationError, no Card created."
+          - "Empty back → CardValidationError, no Card created."
+          - "Image attachments stored and referenced by URL on the Card record."
+        derives_from: [SYS-REQ-005]
+        traces_to: [CAP-002, CAP-008]
+
+      - id: REQ-CRD-002
+        type: functional
+        statement: "When a card's front or back content is edited, the system
+          shall update the Card and emit a content-edited signal. On receiving
+          this signal, the study component shall reset the card's SR state to
+          initial values (interval_days=1, ease_factor=2.5, repetitions=0,
+          next_review_at=now)."
+        acceptance_criteria:
+          - "Edit front content → Card.updated_at refreshed, SR state reset to initial values."
+          - "Edit back content → same reset behavior."
+          - "Edit only image attachments (no content change) → SR state unchanged."
+        derives_from: [SYS-REQ-014]
+        traces_to: [CAP-002, REQ-STU-003]
+
+      - id: REQ-CRD-003
+        type: functional
+        statement: "When a card is deleted, the system shall cascade-remove it
+          from all library memberships and delete its SR state."
+        acceptance_criteria:
+          - "Delete card → card row removed, all library_memberships rows for that card removed, SR state row removed."
+          - "Delete already-deleted card → no-op (idempotent)."
+        traces_to: [CAP-002]
+
+      - id: REQ-CRD-004
+        type: functional
+        statement: "When given a CSV or JSON payload containing card rows, the
+          system shall validate each row and bulk-create valid cards, returning a
+          per-row result array where each entry is either {index, card} or
+          {index, error, reason}."
+        acceptance_criteria:
+          - "3 valid CSV rows → 3 cards created, result array has 3 success entries."
+          - "1 valid + 1 missing back → 1 success + 1 error entry with row index and reason 'missing back'."
+          - "Malformed JSON → top-level parse error, zero cards created."
+          - "Batch with 500 rows → all processed within 10s."
+        derives_from: [SYS-REQ-006]
+        traces_to: [CAP-010]
+
+      - id: REQ-CRD-005
+        type: functional
+        statement: "When given a file via drag-and-drop upload, the system shall
+          detect the format (CSV or JSON), parse it, and delegate to the bulk
+          import path."
+        acceptance_criteria:
+          - "Valid CSV file → parsed, cards created via REQ-CRD-004 path."
+          - "Valid JSON file → same."
+          - "Unsupported format → ImportFormatError."
+        derives_from: [SYS-REQ-006]
+        traces_to: [CAP-009]
+
+      - id: REQ-CRD-006
+        type: functional
+        statement: "When given a text query, the system shall return the user's
+          cards whose front or back content contains a case-insensitive substring
+          match, ordered by relevance."
+        acceptance_criteria:
+          - "Case-insensitive substring matching on both front and back fields."
+          - "Empty query → empty result set (not an error)."
+          - "Results scoped to the requesting user only."
+        derives_from: [SYS-REQ-007]
+        traces_to: [CAP-020]
+
+      - id: REQ-CRD-007
+        type: data
+        statement: "The system shall define a canonical Card model with fields:
+          id (UUID), user_id (UUID), front (rich text string), back (rich text
+          string), image_urls (string array, optional), created_at (timestamp),
+          updated_at (timestamp)."
+        acceptance_criteria:
+          - "Card struct defined in src/cards/, imported by libraries, study, and export components."
+          - "front and back accept Markdown as the initial rich-text format."
+        traces_to: [CAP-002]
+
+      - id: REQ-CRD-008
+        type: nfr
+        statement: "The system shall return search results within 200ms p95 for a
+          user with up to 1,000 cards."
+        nfr_elements:
+          subject: "card search latency"
+          metric: "wall-clock milliseconds, p95"
+          threshold: "≤ 200ms"
+          condition: "user with ≤ 1,000 cards, database on same Railway network"
+          source: "engineering judgment"
+        traces_to: [CAP-020]
+
+    exposes:
+      - name: CardsService.create
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: front, type: string }
+            - { name: back, type: string }
+            - { name: imageUrls, type: "string[]", optional: true }
+          return_type: "(Card, error)"
+        preconditions:
+          - "userId is a non-empty UUID."
+          - "front is a non-empty string."
+          - "back is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns a Card with a newly-generated UUID id."
+            - "Card.user_id equals userId."
+          on_CardValidationError:
+            - "front or back is empty."
+        invariants: []
+        typed_errors:
+          - { name: CardValidationError, when: "front or back is empty." }
+        style: tolerant
+
+      - name: CardsService.bulkImport
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: format, type: "'csv' | 'json'" }
+            - { name: payload, type: "string" }
+          return_type: "ImportResult[]"
+        preconditions:
+          - "format is 'csv' or 'json'."
+          - "payload is a non-empty string in the declared format."
+        postconditions:
+          on_success:
+            - "Returns an array of {index, card?} | {index, error, reason}."
+            - "Partial success: valid rows create cards; invalid rows record errors without aborting."
+          on_ImportFormatError:
+            - "payload cannot be parsed as the declared format."
+        invariants: []
+        typed_errors:
+          - { name: ImportFormatError, when: "payload does not match the declared format." }
+        style: tolerant
+
+      - name: CardsService.search
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: query, type: string }
+          return_type: "Card[]"
+        preconditions:
+          - "userId is a non-empty UUID."
+        postconditions:
+          on_success:
+            - "Returns cards owned by userId where front or back ILIKE %query%."
+            - "Empty query returns empty array (not error)."
+        invariants: []
+        style: tolerant
+
+      - name: CardsService.getById
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: "(Card, error)"
+        preconditions:
+          - "userId is a non-empty UUID."
+          - "cardId is a non-empty UUID."
+        postconditions:
+          on_success:
+            - "Returns the Card with the given id."
+          on_CardNotFoundError:
+            - "No card with cardId exists, or card belongs to a different user."
+        invariants: []
+        typed_errors:
+          - { name: CardNotFoundError, when: "cardId does not exist or belongs to another user." }
+        style: tolerant
+
+      - name: CardsService.delete
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: void
+        preconditions:
+          - "userId is a non-empty UUID."
+          - "cardId is a non-empty UUID."
+        postconditions:
+          on_success:
+            - "Card row deleted."
+            - "All library_memberships rows for cardId deleted."
+            - "SR state row for (userId, cardId) deleted."
+        invariants: []
+        style: tolerant
+
+      - Card
+    depends_on: [auth, database]
+    constraints:
+      max_source_files: 20
+      max_exported_symbols: 15
+    status: OK
+    governed_by_adrs: [ADR-001, ADR-002]
+
+  # ── Libraries ──────────────────────────────────────────────────────────────
+  libraries:
+    path: src/libraries/
+    requirements:
+      - id: REQ-LIB-001
+        type: functional
+        statement: "When given a library name, the system shall create, rename,
+          or delete a Library owned by the specified user. Deleting a library
+          cascades to remove all its membership rows but not the cards."
+        acceptance_criteria:
+          - "Create → Library persisted with generated id and user_id."
+          - "Rename → Library.name updated."
+          - "Delete → Library row removed, all LibraryMembership rows for that library removed, cards untouched."
+        derives_from: [SYS-REQ-008]
+        traces_to: [CAP-004]
+
+      - id: REQ-LIB-002
+        type: functional
+        statement: "When given a card id and library id, the system shall create
+          a LibraryMembership row associating the card with the library. The card
+          must belong to the same user as the library."
+        acceptance_criteria:
+          - "Card and library belong to same user → membership created."
+          - "Card belongs to different user → LibraryNotFoundError (not 403)."
+          - "Membership already exists → LibraryDuplicateMembershipError."
+        derives_from: [SYS-REQ-008, SYS-REQ-009]
+        traces_to: [CAP-004, CAP-005]
+
+      - id: REQ-LIB-003
+        type: functional
+        statement: "When given a card id and library id, the system shall remove
+          the LibraryMembership row. This operation shall not read, write, or
+          affect any SR state."
+        acceptance_criteria:
+          - "Membership exists → row deleted, SR state unchanged."
+          - "Membership does not exist → no-op."
+          - "Verify: after removal, SR state interval_days, ease_factor, next_review_at are byte-identical."
+        derives_from: [SYS-REQ-008]
+        traces_to: [CAP-006]
+
+      - id: REQ-LIB-004
+        type: functional
+        statement: "When given a library id, the system shall return the cards
+          belonging to that library, scoped to the requesting user."
+        acceptance_criteria:
+          - "Returns all cards where a LibraryMembership row references the library."
+          - "Card data includes front, back, and active flag."
+          - "Library belongs to different user → LibraryNotFoundError."
+        derives_from: [SYS-REQ-009]
+        traces_to: [CAP-004]
+
+      - id: REQ-LIB-005
+        type: invariant
+        statement: "The LibraryMembership junction shall reference cards and
+          libraries by foreign key. Deleting a LibraryMembership row shall not
+          cascade to Card or SRState. There is no library_id column on SRState."
+        acceptance_criteria:
+          - "FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE."
+          - "FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE."
+          - "No trigger or application code that writes SRState on membership DELETE."
+          - "SRState schema lacks a library_id column."
+        derives_from: [SYS-REQ-010]
+        traces_to: [CAP-005, CAP-006]
+
+      - id: REQ-LIB-006
+        type: data
+        statement: "The system shall define a Library model with fields: id (UUID),
+          user_id (UUID), name (string, max 100 chars), created_at (timestamp),
+          updated_at (timestamp). Library names are unique per user."
+        acceptance_criteria:
+          - "UNIQUE constraint on (user_id, name)."
+        traces_to: [CAP-004]
+
+      - id: REQ-LIB-007
+        type: data
+        statement: "The system shall define a LibraryMembership model as a
+          junction with fields: library_id (UUID FK), card_id (UUID FK),
+          added_at (timestamp). Unique constraint on (library_id, card_id)."
+        acceptance_criteria:
+          - "UNIQUE constraint on (library_id, card_id)."
+          - "No fields beyond the junction keys and added_at timestamp."
+        traces_to: [CAP-005]
+
+    exposes:
+      - name: LibraryService.create
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: name, type: string }
+          return_type: "(Library, error)"
+        preconditions:
+          - "name is a non-empty string of length ≤ 100."
+        postconditions:
+          on_success:
+            - "Returns Library with generated id and user_id."
+          on_LibraryDuplicateNameError:
+            - "name already exists for this user."
+        invariants: []
+        typed_errors:
+          - { name: LibraryDuplicateNameError, when: "name already exists for the user." }
+        style: tolerant
+
+      - name: LibraryService.delete
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+          return_type: void
+        preconditions:
+          - "libraryId belongs to userId."
+        postconditions:
+          on_success:
+            - "Library row deleted."
+            - "All LibraryMembership rows for libraryId deleted."
+            - "No card or SR state rows affected."
+        invariants: []
+        style: demanding
+
+      - name: LibraryService.addCard
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: "(LibraryMembership, error)"
+        preconditions:
+          - "libraryId belongs to userId."
+          - "cardId belongs to userId."
+        postconditions:
+          on_success:
+            - "LibraryMembership row created."
+          on_LibraryNotFoundError:
+            - "libraryId does not exist or belongs to another user."
+          on_LibraryDuplicateMembershipError:
+            - "Membership for (libraryId, cardId) already exists."
+        invariants: []
+        typed_errors:
+          - { name: LibraryNotFoundError, when: "libraryId does not exist or belongs to another user." }
+          - { name: LibraryDuplicateMembershipError, when: "(libraryId, cardId) membership already exists." }
+        style: tolerant
+
+      - name: LibraryService.removeCard
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: void
+        preconditions:
+          - "libraryId belongs to userId."
+          - "cardId belongs to userId."
+        postconditions:
+          on_success:
+            - "LibraryMembership row deleted."
+            - "SR state for (userId, cardId) is unchanged."
+        invariants: []
+        style: demanding
+
+      - name: LibraryService.listCards
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+          return_type: "Card[]"
+        preconditions:
+          - "libraryId belongs to userId."
+        postconditions:
+          on_success:
+            - "Returns all cards whose LibraryMembership references libraryId."
+        invariants: []
+        style: demanding
+
+      - name: LibraryService.getLibraries
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+          return_type: "Library[]"
+        style: tolerant
+
+      - Library
+      - LibraryMembership
+    depends_on: [auth, cards, database]
+    constraints:
+      max_source_files: 12
+      max_exported_symbols: 10
+    status: OK
+    governed_by_adrs: [ADR-001, ADR-002, ADR-003]
+
+  # ── Study ──────────────────────────────────────────────────────────────────
+  study:
+    path: src/study/
+    requirements:
+      - id: REQ-STU-001
+        type: functional
+        statement: "When given a user and library, the system shall return due
+          cards — active cards in that library whose next_review_at ≤ now,
+          ordered by next_review_at ASC."
+        acceptance_criteria:
+          - "Filters to cards in the specified library (via LibraryMembership)."
+          - "Filters to cards where active = true."
+          - "Filters to cards where next_review_at ≤ now."
+          - "Returns empty array when no due cards (not an error)."
+        derives_from: [SYS-REQ-011]
+        traces_to: [CAP-001]
+
+      - id: REQ-STU-002
+        type: functional
+        statement: "When given a recall rating for a card, the system shall
+          apply the SM-2 algorithm to compute the next interval, ease factor,
+          and review date, and persist the updated SR state."
+        acceptance_criteria:
+          - "Rating 'again' → interval_days=1, repetitions=0, ease_factor unchanged, next_review_at=now."
+          - "Rating 'hard' → interval_days ≥ 1, ease_factor decreased by 0.15 (min 1.3)."
+          - "Rating 'good' → interval_days increased per SM-2 formula, ease_factor unchanged."
+          - "Rating 'easy' → interval_days increased (with easy bonus), ease_factor increased by 0.15."
+          - "Review history row appended with rating, timestamp, and computed interval."
+        derives_from: [SYS-REQ-011]
+        traces_to: [CAP-001, ADR-003]
+
+      - id: REQ-STU-003
+        type: functional
+        statement: "When notified that a card's content has been edited, the
+          system shall reset the card's SR state to initial values:
+          interval_days=1, ease_factor=2.5, repetitions=0, next_review_at=now."
+        acceptance_criteria:
+          - "SR state reset to initial values on content edit."
+          - "Previous review history preserved for audit trail."
+          - "SR state not reset on metadata-only changes."
+        derives_from: [SYS-REQ-014]
+        traces_to: [REQ-CRD-002]
+
+      - id: REQ-STU-004
+        type: functional
+        statement: "While a study session is active for a library, the system
+          shall return real-time counts: cards_due_today (computed at session
+          start), cards_reviewed (incremented per rating), cards_remaining
+          (decremented per rating)."
+        acceptance_criteria:
+          - "cards_due_today count computed once at session start and cached for the session duration."
+          - "cards_reviewed starts at 0, increments by 1 after each rating."
+          - "cards_remaining starts at cards_due_today, decrements by 1 after each rating."
+        derives_from: [SYS-REQ-012]
+        traces_to: [CAP-003]
+
+      - id: REQ-STU-005
+        type: functional
+        statement: "When a user toggles a card's active flag, the system shall
+          delegate to the cards component to update the flag. Suspending a card
+          (active=false) preserves its SR history."
+        acceptance_criteria:
+          - "Set active=false → card excluded from due-cards queries."
+          - "Set active=true → card re-included."
+          - "SR state (interval, ease, next_review_at) unchanged by toggle."
+        traces_to: [CAP-007]
+
+      - id: REQ-STU-006
+        type: functional
+        statement: "The system shall compute and return user-level study stats:
+          cards studied today (count of distinct cards reviewed today),
+          current streak (consecutive days with ≥1 review), and total active
+          cards."
+        acceptance_criteria:
+          - "Streak = count of consecutive past days (including today) with ≥1 review."
+          - "Missed day → streak resets to 0."
+          - "Total active cards = COUNT(cards WHERE active=true AND user_id=X)."
+        derives_from: [SYS-REQ-013]
+        traces_to: [CAP-016]
+
+      - id: REQ-STU-007
+        type: functional
+        statement: "When given a card id, the system shall return per-card
+          history: last_reviewed_at, success_rate (good+easy / total reviews),
+          next_review_at."
+        acceptance_criteria:
+          - "Card never reviewed → last_reviewed_at=null, success_rate=null, next_review_at=now."
+          - "Success rate computed from review_history rows, excluding 'again' ratings."
+        derives_from: [SYS-REQ-013]
+        traces_to: [CAP-018]
+
+      - id: REQ-STU-008
+        type: nfr
+        statement: "The system shall compute the next review interval from a
+          rating within 50ms p95, synchronously in the request path."
+        nfr_elements:
+          subject: "SM-2 interval computation latency"
+          metric: "wall-clock milliseconds, p95"
+          threshold: "≤ 50ms"
+          condition: "single rating computation, excluding database write"
+          source: "engineering judgment"
+        traces_to: [CAP-001]
+
+      - id: REQ-STU-009
+        type: data
+        statement: "The system shall define an SRState model with fields:
+          user_id (UUID), card_id (UUID), ease_factor (float, initial 2.5),
+          interval_days (integer, initial 1), repetitions (integer, initial 0),
+          next_review_at (timestamp, initial now), last_reviewed_at (timestamp,
+          nullable), algorithm_version (string), review_history (JSON array of
+          {rating, timestamp, interval})."
+        acceptance_criteria:
+          - "UNIQUE constraint on (user_id, card_id)."
+          - "algorithm_version field allows migration to a different SR algorithm."
+          - "review_history is append-only — no UPDATE on existing entries."
+        traces_to: [CAP-001, CAP-018]
+
+    exposes:
+      - name: StudyService.getDueCards
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+            - { name: limit, type: "number", optional: true }
+          return_type: "Card[]"
+        preconditions:
+          - "libraryId belongs to userId."
+        postconditions:
+          on_success:
+            - "Returns active cards in the library with next_review_at ≤ now."
+            - "Ordered by next_review_at ASC."
+        invariants: []
+        style: demanding
+
+      - name: StudyService.rateCard
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+            - { name: rating, type: "'again' | 'hard' | 'good' | 'easy'" }
+          return_type: "(SRState, error)"
+        preconditions:
+          - "cardId belongs to userId."
+          - "rating is one of: again, hard, good, easy."
+        postconditions:
+          on_success:
+            - "SRState.interval_days, ease_factor, repetitions, next_review_at updated per SM-2."
+            - "SRState.last_reviewed_at set to now."
+            - "Review history entry appended."
+          on_CardNotInStudyError:
+            - "cardId is not active or has no SR state row."
+        invariants: []
+        typed_errors:
+          - { name: CardNotInStudyError, when: "card is not active or has no SR state." }
+          - { name: InvalidRatingError, when: "rating is not one of the four valid values." }
+        style: tolerant
+
+      - name: StudyService.resetSRState
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: void
+        preconditions:
+          - "cardId belongs to userId."
+        postconditions:
+          on_success:
+            - "ease_factor = 2.5, interval_days = 1, repetitions = 0, next_review_at = now."
+            - "review_history preserved."
+        invariants: []
+        style: demanding
+
+      - name: StudyService.getSessionCounts
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: libraryId, type: UUID }
+          return_type: "SessionCounts"
+        preconditions:
+          - "libraryId belongs to userId."
+        style: demanding
+
+      - name: StudyService.getStats
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+          return_type: "UserStats"
+        style: tolerant
+
+      - name: StudyService.getCardHistory
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+          return_type: "(CardHistory, error)"
+        preconditions:
+          - "cardId belongs to userId."
+        postconditions:
+          on_success:
+            - "Returns last_reviewed_at, success_rate, next_review_at for the card."
+        invariants: []
+        style: demanding
+
+      - name: StudyService.setActive
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: cardId, type: UUID }
+            - { name: active, type: boolean }
+          return_type: void
+        preconditions:
+          - "cardId belongs to userId."
+        postconditions:
+          on_success:
+            - "Card.active set to the given value."
+            - "SR state unchanged."
+        invariants: []
+        style: demanding
+
+      - SRState
+      - SessionCounts
+      - UserStats
+      - CardHistory
+    depends_on: [auth, cards, libraries, database]
+    constraints:
+      max_source_files: 25
+      max_exported_symbols: 18
+    status: OK
+    governed_by_adrs: [ADR-001, ADR-002, ADR-003]
+
+  # ── Export ─────────────────────────────────────────────────────────────────
+  export:
+    path: src/export/
+    requirements:
+      - id: REQ-EXP-001
+        type: functional
+        statement: "When requested by an authenticated user, the system shall
+          assemble all of that user's cards and per-card SR state into a single
+          JSON payload and return it as a downloadable file."
+        acceptance_criteria:
+          - "Response Content-Type: application/json, Content-Disposition: attachment; filename=study-export-{date}.json."
+          - "JSON structure: { version: 1, exported_at: ISO, cards: [...], sr_states: [...] }."
+          - "Each card entry includes: id, front, back, image_urls, created_at."
+          - "Each SR state entry includes: card_id, ease_factor, interval_days, next_review_at, review_history."
+        derives_from: [SYS-REQ-015]
+        traces_to: [CAP-019]
+
+      - id: REQ-EXP-002
+        type: data
+        statement: "The system shall define an export format with a version
+          field to support schema evolution. Version 1 includes cards and full
+          SR state."
+        acceptance_criteria:
+          - "JSON root has 'version' field (integer, current=1)."
+          - "Missing or unknown version in a future import → clear error."
+        traces_to: [CAP-019]
+
+    exposes:
+      - name: ExportService.exportAll
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+          return_type: "ExportPayload"
+        preconditions:
+          - "userId is a non-empty UUID."
+        postconditions:
+          on_success:
+            - "Returns all cards owned by userId."
+            - "Returns SR state for every card owned by userId that has one."
+        invariants: []
+        style: tolerant
+
+      - ExportPayload
+    depends_on: [auth, cards, study]
+    constraints:
+      max_source_files: 5
+      max_exported_symbols: 5
+    status: OK
+    # ADR-004 is proposed pending OPQ-003 resolution; trace is speculative.
+    governed_by_adrs: [ADR-001, ADR-002, ADR-004]
+
+  # ── API Tokens ─────────────────────────────────────────────────────────────
+  api-tokens:
+    path: src/api-tokens/
+    requirements:
+      - id: REQ-TKN-001
+        type: functional
+        statement: "When a user generates a personal API token, the system shall
+          create a cryptographically random bearer token, store its hash (never
+          the raw value), and return the raw token once."
+        acceptance_criteria:
+          - "Token value returned once at creation time; not recoverable later."
+          - "Token hash stored with user_id, label, created_at, last_used_at (nullable)."
+          - "Re-displaying token list shows metadata only (no raw token values)."
+        derives_from: [SYS-REQ-016]
+        traces_to: [CAP-011]
+
+      - id: REQ-TKN-002
+        type: functional
+        statement: "When a user revokes a token, the system shall delete the
+          token record; subsequent requests with that token shall return 401."
+        acceptance_criteria:
+          - "Revoked token no longer authenticates requests."
+          - "Already-revoked token → no-op."
+        traces_to: [CAP-011]
+
+      - id: REQ-TKN-003
+        type: functional
+        statement: "When given a bearer token in an Authorization header, the
+          system shall look up the corresponding user by token hash. The token
+          is scoped to the user who created it — requests authenticated via
+          token act as that user."
+        acceptance_criteria:
+          - "Valid token → resolved to the token owner's user identity."
+          - "Expired/revoked/nonexistent token → 401 Unauthorized."
+          - "Token-authenticated requests carry the user_id of the token owner."
+        derives_from: [SYS-REQ-017]
+        traces_to: [CAP-011, CAP-012]
+
+      - id: REQ-TKN-004
+        type: functional
+        statement: "When an external caller submits a card via POST /api/cards
+          with a valid personal token, the system shall create the card in the
+          token owner's account and assign it to the library specified in the
+          request body."
+        acceptance_criteria:
+          - "Valid token + valid library_id (belonging to token owner) → card created and assigned."
+          - "library_id belongs to a different user → 404 Not Found."
+          - "Missing library_id → 422 Unprocessable."
+        derives_from: [SYS-REQ-017]
+        traces_to: [CAP-012]
+
+    exposes:
+      - name: ApiTokenService.createToken
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: label, type: string }
+          return_type: "(ApiToken, string, error)"
+        preconditions:
+          - "label is a non-empty string ≤ 100 chars."
+        postconditions:
+          on_success:
+            - "Returns ApiToken metadata + raw token string (the raw string is never stored)."
+            - "ApiToken.token_hash is SHA-256 of the raw token."
+          on_ApiTokenLabelError:
+            - "label is empty or exceeds 100 chars."
+        invariants: []
+        typed_errors:
+          - { name: ApiTokenLabelError, when: "label is empty or exceeds 100 chars." }
+        style: tolerant
+
+      - name: ApiTokenService.validateToken
+        signature:
+          parameters:
+            - { name: token, type: string }
+          return_type: "(User, error)"
+        preconditions:
+          - "token is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns the User who owns the token."
+            - "ApiToken.last_used_at updated to now."
+          on_ApiTokenInvalidError:
+            - "Token hash does not match any stored token."
+        invariants: []
+        typed_errors:
+          - { name: ApiTokenInvalidError, when: "token not found, expired, or revoked." }
+        style: tolerant
+
+      - name: ApiTokenService.revokeToken
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: tokenId, type: UUID }
+          return_type: void
+        style: tolerant
+
+      - name: ApiTokenService.listTokens
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+          return_type: "ApiToken[]"
+        style: tolerant
+
+      - ApiToken
+    depends_on: [auth, cards, libraries]
+    constraints:
+      max_source_files: 10
+      max_exported_symbols: 8
+    status: OK
+    # ADR-004 is proposed pending OPQ-003 resolution; trace is speculative.
+    governed_by_adrs: [ADR-001, ADR-002, ADR-004]
+
+  # ── Mind Maps ──────────────────────────────────────────────────────────────
+  mindmaps:
+    path: src/mindmaps/
+    requirements:
+      - id: REQ-MM-001
+        type: functional
+        statement: "When a user creates a mind map, the system shall persist a
+          blank canvas with a user-specified name."
+        acceptance_criteria:
+          - "Create → MindMap persisted with generated id, user_id, name, empty node list."
+        derives_from: [SYS-REQ-018]
+        traces_to: [CAP-021, CAP-022]
+
+      - id: REQ-MM-002
+        type: functional
+        statement: "The system shall allow placing, moving, editing text content,
+          and deleting text notes on a mind map canvas. Node positions are
+          persisted as x,y coordinates."
+        acceptance_criteria:
+          - "Add node → persisted with id, map_id, x, y, text content, node_type='text'."
+          - "Move node → x,y updated."
+          - "Edit node text → content updated."
+          - "Delete node → node removed from map."
+        derives_from: [SYS-REQ-018]
+        traces_to: [CAP-021]
+
+      - id: REQ-MM-003
+        type: functional
+        statement: "When a user loads a mind map, the system shall return the
+          map metadata and all its nodes. When a user deletes a mind map, all
+          its nodes are cascade-deleted."
+        acceptance_criteria:
+          - "Load → map + all node data returned."
+          - "Delete → map row + all node rows removed."
+        derives_from: [SYS-REQ-018]
+        traces_to: [CAP-022]
+
+      - id: REQ-MM-004
+        type: functional
+        statement: "The system shall scope all mind map operations to the
+          authenticated user. Attempting to access another user's mind map by
+          ID shall return 404 Not Found."
+        acceptance_criteria:
+          - "Every mind map query filters by user_id."
+          - "Cross-user access returns 404 (not 403)."
+        traces_to: [CAP-023]
+
+      - id: REQ-MM-005
+        type: data
+        statement: "The system shall define a MindMap model (id, user_id, name,
+          created_at, updated_at) and a MindMapNode model (id, map_id, node_type,
+          x, y, text_content, created_at, updated_at). node_type supports 'text'
+          initially and is extensible for future node types."
+        acceptance_criteria:
+          - "MindMapNode.node_type = 'text' for MVP nodes."
+          - "Additional node_type values can be added without schema migration."
+        traces_to: [CAP-021]
+
+    exposes:
+      - name: MindMapService.create
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: name, type: string }
+          return_type: "(MindMap, error)"
+        preconditions:
+          - "name is a non-empty string ≤ 100 chars."
+        postconditions:
+          on_success:
+            - "Returns a MindMap with a newly-generated UUID id and user_id set to userId."
+          on_MindMapNameError:
+            - "name is empty or exceeds 100 chars."
+        invariants: []
+        typed_errors:
+          - { name: MindMapNameError, when: "name is empty or exceeds 100 chars." }
+        style: tolerant
+
+      - name: MindMapService.get
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: mapId, type: UUID }
+          return_type: "(MindMapWithNodes, error)"
+        preconditions:
+          - "mapId belongs to userId."
+        postconditions:
+          on_success:
+            - "Returns MindMap metadata + all MindMapNode rows."
+        invariants: []
+        style: demanding
+
+      - name: MindMapService.update
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: mapId, type: UUID }
+            - { name: nodes, type: "MindMapNode[]" }
+          return_type: void
+        preconditions:
+          - "mapId belongs to userId."
+        style: demanding
+
+      - name: MindMapService.delete
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+            - { name: mapId, type: UUID }
+          return_type: void
+        style: demanding
+
+      - name: MindMapService.list
+        signature:
+          parameters:
+            - { name: userId, type: UUID }
+          return_type: "MindMap[]"
+        style: tolerant
+
+      - MindMap
+      - MindMapNode
+      - MindMapWithNodes
+    depends_on: [auth, database]
+    constraints:
+      max_source_files: 12
+      max_exported_symbols: 8
+    status: OK
+    governed_by_adrs: [ADR-001, ADR-002]
+
+  # ── UI ─────────────────────────────────────────────────────────────────────
+  ui:
+    path: src/ui/
+    requirements:
+      - id: REQ-UI-001
+        type: nfr
+        statement: "While rendering any screen, the system shall present legible
+          content without horizontal scroll on viewports from 320px to 2560px
+          wide, with interactive touch targets at least 44×44 CSS pixels on
+          viewports ≤ 768px wide."
+        nfr_elements:
+          subject: "UI responsiveness"
+          metric: "CSS pixels"
+          threshold: "touch targets ≥ 44×44px on viewport ≤ 768px; no horizontal scroll at ≥ 320px"
+          condition: "all screens"
+          source: "WCAG 2.1 + phone-first constraint"
+        derives_from: [SYS-REQ-019]
+        traces_to: [CAP-024]
+
+      - id: REQ-UI-002
+        type: functional
+        statement: "Where the user's browser supports PWA installation, the
+          system shall serve a web app manifest and a service worker that caches
+          the application shell for offline launch."
+        acceptance_criteria:
+          - "manifest.json served with correct name, icons, start_url, display: standalone."
+          - "Service worker registered and caches app shell (HTML, CSS, JS) on install."
+          - "Browser 'Install' prompt is triggerable."
+        traces_to: [CAP-025]
+
+    exposes:
+      - AppShell
+    depends_on: [auth, cards, libraries, study, export, api-tokens, mindmaps]
+    constraints:
+      max_source_files: 30
+      max_exported_symbols: 20
+    status: OK
+    governed_by_adrs: [ADR-001, ADR-002]
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  database:
+    path: prisma/
+    requirements:
+      - id: REQ-DB-001
+        type: functional
+        statement: "The system shall define a relational schema with tables for
+          User, Session, Card, Library, LibraryMembership, SRState, ApiToken,
+          MindMap, and MindMapNode. All foreign keys shall cascade deletes where
+          the child row is meaningless without the parent."
+        acceptance_criteria:
+          - "All tables listed exist in the schema."
+          - "FOREIGN KEY constraints on all inter-table references."
+          - "ON DELETE CASCADE: Session→User, LibraryMembership→Library, LibraryMembership→Card, MindMapNode→MindMap, SRState→Card."
+          - "ON DELETE RESTRICT (or no cascade): ApiToken→User (manual revocation)."
+        derives_from: [SYS-REQ-001]
+        traces_to: [ADR-001, ADR-002]
+
+    exposes:
+      - PrismaClient
+      - Schema
+    depends_on: []
+    constraints:
+      max_source_files: 5
+      max_exported_symbols: 5
+    status: support
+    governed_by_adrs: [ADR-001, ADR-002]
+
+# ── Conventions ──────────────────────────────────────────────────────────────
 
 conventions:
-  # Repository-hygiene rules (CONV-NNN)
+  - id: CONV-001
+    rule: "All data-fetching endpoints scope queries to the authenticated user's id — no endpoint accepts a user_id parameter from the request body or query string."
+    rationale: "Prevents horizontal privilege escalation; user identity comes from the session/token only."
+    enforced_by: "review"
+    applies_to: ["src/auth/**", "src/cards/**", "src/libraries/**", "src/study/**", "src/export/**", "src/api-tokens/**", "src/mindmaps/**"]
+
+  - id: CONV-002
+    rule: "Component imports shall not cross domain boundaries except through declared exposes interfaces — no direct database access from ui, no direct card-table access from study."
+    rationale: "Enforces the component boundary discipline declared in COMPONENTS.yaml."
+    enforced_by: "review"
+    applies_to: ["src/**"]
+
+  - id: CONV-003
+    rule: "All database access goes through Prisma — no raw SQL queries except in migration files."
+    rationale: "Single query-building seam for type safety, connection pooling, and Railway Hobby connection-limit compliance."
+    enforced_by: "review"
+    applies_to: ["src/**"]
+
+# ── Dependency Rules ─────────────────────────────────────────────────────────
 
 dependency_rules:
-  # Directional import constraints between components
+  - "ui must not import directly from database"
+  - "No circular dependencies between components"

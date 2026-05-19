@@ -2,4 +2,363 @@
 # Produced by the Solution Architect (/wf-skill-sa).
 # Consumed by the Software Architect (/wf-skill-swa) to produce sprint.yaml.
 
-sprints: []
+sprints:
+  # ── Sprint 1: Auth foundation ──────────────────────────────────────────────
+  - id: "S1"
+    goal: "Users can register and log in — foundational identity layer for all subsequent work."
+    components_touched: [auth, database, ui]
+    items:
+      - id: "S1.1"
+        title: "Database schema — User, Session, and core tables"
+        component: database
+        capability_ref: null
+        rough_scope: "Prisma schema with User, Session, and all placeholder tables, ~80 lines"
+        depends_on: []
+      - id: "S1.2"
+        title: "User registration with email + password"
+        component: auth
+        capability_ref: CAP-013
+        rough_scope: "Register endpoint, password hashing, User model, ~120 lines"
+        depends_on: ["S1.1"]
+      - id: "S1.3"
+        title: "Login and session management"
+        component: auth
+        capability_ref: CAP-014
+        rough_scope: "Login endpoint, session creation/validation, logout, ~150 lines"
+        depends_on: ["S1.2"]
+      - id: "S1.4"
+        title: "Auth UI — register, login, logout screens"
+        component: ui
+        capability_ref: CAP-013
+        rough_scope: "Register form, login form, session-aware nav, ~200 lines"
+        depends_on: ["S1.3"]
+
+  # ── Sprint 2: Auth hardening ───────────────────────────────────────────────
+  - id: "S2"
+    goal: "Password reset flow and security hardening."
+    components_touched: [auth, ui]
+    items:
+      - id: "S2.1"
+        title: "Password reset via email token"
+        component: auth
+        capability_ref: CAP-015
+        rough_scope: "Request reset endpoint, email sending, token validation, password update, ~180 lines"
+        depends_on: ["S1.2"]
+      - id: "S2.2"
+        title: "Password storage NFR — bcrypt/argon2 enforcement"
+        component: auth
+        capability_ref: CAP-013
+        rough_scope: "Config validation, hash verification tests, ~50 lines"
+        depends_on: ["S2.1"]
+      - id: "S2.3"
+        title: "Password reset UI flow"
+        component: ui
+        capability_ref: CAP-015
+        rough_scope: "Forgot password form, reset token page, ~100 lines"
+        depends_on: ["S2.1"]
+
+  # ── Sprint 3: Core cards ───────────────────────────────────────────────────
+  - id: "S3"
+    goal: "Users can create rich-text cards — the fundamental content unit."
+    components_touched: [cards, ui]
+    items:
+      - id: "S3.1"
+        title: "Card model and create endpoint"
+        component: cards
+        capability_ref: CAP-002
+        rough_scope: "Card model, create endpoint with validation, ~120 lines"
+        depends_on: ["S1.2"]
+      - id: "S3.2"
+        title: "Card editor UI — rich-text front/back"
+        component: ui
+        capability_ref: CAP-008
+        rough_scope: "Card creation form with rich-text inputs, ~180 lines"
+        depends_on: ["S3.1"]
+
+  # ── Sprint 4: Card management + SR state model ─────────────────────────────
+  - id: "S4"
+    goal: "Users can edit and delete cards; SR state model defined and resets on edit."
+    components_touched: [cards, study, ui]
+    items:
+      - id: "S4.1"
+        title: "Edit card with SR reset and delete card with cascade"
+        component: cards
+        capability_ref: CAP-002
+        rough_scope: "Edit endpoint, content-change detection, delete with cascade, ~150 lines"
+        depends_on: ["S3.1"]
+      - id: "S4.2"
+        title: "SRState model and reset-on-edit handler"
+        component: study
+        capability_ref: CAP-006
+        rough_scope: "SRState model, resetSRState function, ~100 lines"
+        depends_on: ["S4.1"]
+      - id: "S4.3"
+        title: "Card edit/delete UI"
+        component: ui
+        capability_ref: CAP-008
+        rough_scope: "Edit card form, delete confirmation, ~120 lines"
+        depends_on: ["S4.1"]
+
+  # ── Sprint 5: Bulk import ──────────────────────────────────────────────────
+  - id: "S5"
+    goal: "Users can import cards from CSV and JSON files."
+    components_touched: [cards, ui]
+    items:
+      - id: "S5.1"
+        title: "Bulk import — CSV and JSON parsing with per-row error reporting"
+        component: cards
+        capability_ref: CAP-010
+        rough_scope: "Import endpoint, CSV/JSON parsers, per-row result array, ~200 lines"
+        depends_on: ["S3.1"]
+      - id: "S5.2"
+        title: "Drag-and-drop file import with format detection"
+        component: cards
+        capability_ref: CAP-009
+        rough_scope: "File upload endpoint, format detection, delegate to bulk import, ~100 lines"
+        depends_on: ["S5.1"]
+      - id: "S5.3"
+        title: "Import UI — file drop zone and results display"
+        component: ui
+        capability_ref: CAP-009
+        rough_scope: "Drag-drop zone, file picker, per-row result table, ~180 lines"
+        depends_on: ["S5.2"]
+
+  # ── Sprint 6: Search ───────────────────────────────────────────────────────
+  - id: "S6"
+    goal: "Users can search across all their cards by text content."
+    components_touched: [cards, ui]
+    items:
+      - id: "S6.1"
+        title: "Full-text search endpoint with ILIKE"
+        component: cards
+        capability_ref: CAP-020
+        rough_scope: "Search endpoint, case-insensitive ILIKE on front and back, ~80 lines"
+        depends_on: ["S3.1"]
+      - id: "S6.2"
+        title: "Search UI — search bar and results list"
+        component: ui
+        capability_ref: CAP-020
+        rough_scope: "Search bar, debounced query, results list, ~120 lines"
+        depends_on: ["S6.1"]
+
+  # ── Sprint 7: Libraries core ───────────────────────────────────────────────
+  - id: "S7"
+    goal: "Users can organize cards into named libraries with many-to-many membership."
+    components_touched: [libraries, ui]
+    items:
+      - id: "S7.1"
+        title: "Library CRUD and data models"
+        component: libraries
+        capability_ref: CAP-004
+        rough_scope: "Library model, create/rename/delete endpoints, LibraryMembership junction model, ~180 lines"
+        depends_on: ["S1.2", "S3.1"]
+      - id: "S7.2"
+        title: "Add/remove cards from library (SR-orthogonal)"
+        component: libraries
+        capability_ref: CAP-006
+        rough_scope: "addCard/removeCard endpoints, membership uniqueness enforcement, ~120 lines"
+        depends_on: ["S7.1"]
+      - id: "S7.3"
+        title: "Library membership invariant — no SR mutation on remove"
+        component: libraries
+        capability_ref: CAP-006
+        rough_scope: "Integration test verifying SR state unchanged after card removal, ~60 lines"
+        depends_on: ["S7.2", "S4.2"]
+      - id: "S7.4"
+        title: "Library management UI — create, list, rename, delete"
+        component: ui
+        capability_ref: CAP-004
+        rough_scope: "Library list, create/rename forms, delete confirmation, ~160 lines"
+        depends_on: ["S7.1"]
+
+  # ── Sprint 8: Library membership UI ────────────────────────────────────────
+  - id: "S8"
+    goal: "Users can browse cards in a library and manage membership."
+    components_touched: [libraries, ui]
+    items:
+      - id: "S8.1"
+        title: "List cards in a library endpoint"
+        component: libraries
+        capability_ref: CAP-004
+        rough_scope: "listCards endpoint joining LibraryMembership + Cards, ~60 lines"
+        depends_on: ["S7.2"]
+      - id: "S8.2"
+        title: "Library card browser UI — view cards, add/remove from library"
+        component: ui
+        capability_ref: CAP-005
+        rough_scope: "Card list per library, add-to-library picker, remove button, ~200 lines"
+        depends_on: ["S8.1"]
+
+  # ── Sprint 9: Study core loop ──────────────────────────────────────────────
+  - id: "S9"
+    goal: "Users can study due cards on a spaced repetition schedule — the core value proposition."
+    components_touched: [study, cards, ui]
+    items:
+      - id: "S9.1"
+        title: "Due cards query — library-scoped, active only, ordered by urgency"
+        component: study
+        capability_ref: CAP-001
+        rough_scope: "getDueCards query joining SRState + LibraryMembership + Cards, ~100 lines"
+        depends_on: ["S4.2", "S7.2"]
+      - id: "S9.2"
+        title: "SM-2 rating handler — compute next interval from rating"
+        component: study
+        capability_ref: CAP-001
+        rough_scope: "rateCard endpoint, SM-2 algorithm with again/hard/good/easy, review history append, ~150 lines"
+        depends_on: ["S9.1"]
+      - id: "S9.3"
+        title: "Active flag toggle endpoint"
+        component: study
+        capability_ref: CAP-007
+        rough_scope: "setActive endpoint delegating to cards component, ~50 lines"
+        depends_on: ["S9.1"]
+      - id: "S9.4"
+        title: "Study session UI — card flip, rating buttons, session flow"
+        component: ui
+        capability_ref: CAP-001
+        rough_scope: "Card flip animation, 4 rating buttons, session start/complete screens, ~250 lines"
+        depends_on: ["S9.2"]
+
+  # ── Sprint 10: Study stats & counts ────────────────────────────────────────
+  - id: "S10"
+    goal: "Users see session counts, study streaks, and per-card history."
+    components_touched: [study, ui]
+    items:
+      - id: "S10.1"
+        title: "Session counts — due today, reviewed, remaining"
+        component: study
+        capability_ref: CAP-003
+        rough_scope: "getSessionCounts endpoint, cached due-today count, ~80 lines"
+        depends_on: ["S9.2"]
+      - id: "S10.2"
+        title: "User stats — streak, cards studied today, total active"
+        component: study
+        capability_ref: CAP-016
+        rough_scope: "getStats endpoint, streak computation, ~100 lines"
+        depends_on: ["S9.2"]
+      - id: "S10.3"
+        title: "Per-card history — last reviewed, success rate, next review"
+        component: study
+        capability_ref: CAP-018
+        rough_scope: "getCardHistory endpoint, success rate from review_history, ~80 lines"
+        depends_on: ["S9.2"]
+      - id: "S10.4"
+        title: "Stats dashboard UI — streaks, counts, per-card history"
+        component: ui
+        capability_ref: CAP-016
+        rough_scope: "Dashboard page, streak display, card history list, ~200 lines"
+        depends_on: ["S10.1", "S10.2", "S10.3"]
+
+  # ── Sprint 11: Export ─────────────────────────────────────────────────────
+  - id: "S11"
+    goal: "Users can export all cards and SR state as a downloadable JSON file."
+    components_touched: [export, ui]
+    items:
+      - id: "S11.1"
+        title: "Export endpoint — assemble cards + SR state into JSON"
+        component: export
+        capability_ref: CAP-019
+        rough_scope: "exportAll endpoint, JSON schema v1, downloadable attachment, ~100 lines"
+        depends_on: ["S3.1", "S9.2"]
+      - id: "S11.2"
+        title: "Export UI — button and download trigger"
+        component: ui
+        capability_ref: CAP-019
+        rough_scope: "Export button in settings, download trigger, ~60 lines"
+        depends_on: ["S11.1"]
+
+  # ── Sprint 12: Reminders ──────────────────────────────────────────────────
+  - id: "S12"
+    goal: "Users receive daily study reminders (opt-in)."
+    components_touched: [study, ui]
+    items:
+      - id: "S12.1"
+        title: "Reminder preference and delivery mechanism"
+        component: study
+        capability_ref: CAP-017
+        rough_scope: "Opt-in preference storage, delivery mechanism (PWA notification or email), ~150 lines"
+        depends_on: ["S1.2"]
+      - id: "S12.2"
+        title: "Reminder settings UI"
+        component: ui
+        capability_ref: CAP-017
+        rough_scope: "Reminder toggle in settings, ~50 lines"
+        depends_on: ["S12.1"]
+
+  # ── Sprint 13: API tokens ─────────────────────────────────────────────────
+  - id: "S13"
+    goal: "Users can generate personal API tokens for programmatic card creation."
+    components_touched: [api-tokens, ui]
+    items:
+      - id: "S13.1"
+        title: "API token CRUD — generate, list, revoke, regenerate"
+        component: api-tokens
+        capability_ref: CAP-011
+        rough_scope: "createToken, listTokens, revokeToken endpoints, token hash storage, ~150 lines"
+        depends_on: ["S1.2"]
+      - id: "S13.2"
+        title: "Token validation middleware"
+        component: api-tokens
+        capability_ref: CAP-012
+        rough_scope: "validateToken middleware, Authorization header parsing, user resolution, ~80 lines"
+        depends_on: ["S13.1"]
+      - id: "S13.3"
+        title: "External card creation endpoint — POST /api/cards"
+        component: api-tokens
+        capability_ref: CAP-012
+        rough_scope: "Card creation endpoint with token auth + library assignment, ~120 lines"
+        depends_on: ["S13.2", "S3.1", "S7.2"]
+      - id: "S13.4"
+        title: "API token management UI"
+        component: ui
+        capability_ref: CAP-011
+        rough_scope: "Token list, generate dialog, revoke button, ~120 lines"
+        depends_on: ["S13.1"]
+
+  # ── Sprint 14: Mind maps ──────────────────────────────────────────────────
+  - id: "S14"
+    goal: "Users can create, edit, and save mind maps with text notes on a canvas."
+    components_touched: [mindmaps, ui]
+    items:
+      - id: "S14.1"
+        title: "Mind map CRUD and node models"
+        component: mindmaps
+        capability_ref: CAP-022
+        rough_scope: "MindMap + MindMapNode models, create/get/delete endpoints, ~150 lines"
+        depends_on: ["S1.2"]
+      - id: "S14.2"
+        title: "Node management — place, move, edit, delete text notes"
+        component: mindmaps
+        capability_ref: CAP-021
+        rough_scope: "update endpoint with full node list, position persistence, ~100 lines"
+        depends_on: ["S14.1"]
+      - id: "S14.3"
+        title: "Mind map privacy enforcement"
+        component: mindmaps
+        capability_ref: CAP-023
+        rough_scope: "User-scoping on all queries, 404 for cross-user access, ~60 lines"
+        depends_on: ["S14.1"]
+      - id: "S14.4"
+        title: "Mind map canvas UI"
+        component: ui
+        capability_ref: CAP-021
+        rough_scope: "Canvas component, draggable text nodes, save/load toolbar, ~300 lines"
+        depends_on: ["S14.2"]
+
+  # ── Sprint 15: Platform hardening ─────────────────────────────────────────
+  - id: "S15"
+    goal: "Phone-first responsive design and PWA installability."
+    components_touched: [ui]
+    items:
+      - id: "S15.1"
+        title: "Phone-first responsive layout — all screens"
+        component: ui
+        capability_ref: CAP-024
+        rough_scope: "Responsive CSS audit, touch target sizing, mobile nav, ~300 lines across all screens"
+        depends_on: ["S1.4", "S3.2", "S4.3", "S7.4", "S8.2", "S9.4", "S10.4"]
+      - id: "S15.2"
+        title: "PWA manifest and service worker"
+        component: ui
+        capability_ref: CAP-025
+        rough_scope: "manifest.json, service worker with app-shell caching, install prompt, ~100 lines"
+        depends_on: ["S15.1"]
