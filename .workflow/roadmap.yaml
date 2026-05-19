@@ -1,0 +1,316 @@
+# roadmap.yaml — Product roadmap (plan layer)
+#
+# Owned by: wf-skill-strategist
+# Default path: paths.roadmap (default .workflow/roadmap.yaml)
+#
+# Persistent, git-tracked. Authored interactively in /wf-skill-strategist sessions.
+# Downstream consumers:
+#   - wf-skill-sa (roadmap mode) — SYS-REQs/REQs trace to capability ids via traces_to.
+#                                  External constraints become type: inherited-constraint REQs.
+#   - wf-skill-arbitrator-review — validates that traces_to references resolve here.
+#
+# ID namespaces (each monotonic over the roadmap's lifetime; never renumber on removal):
+#   CAP-NNN   capabilities (user-voice statements of what the user/operator/external system can do)
+#   EXT-NNN   external constraints (binding mandates: tech / policy / regulation with no alternatives)
+#   OOS-NNN   out-of-scope items (explicitly excluded)
+#   OPQ-NNN   open questions (block roadmap-mode planning until resolved)
+#   DEF-NNN   deferred items (capabilities parked for later with a revisit trigger)
+
+version: 1
+last_updated: "2026-05-19"
+updated_by: "strategist"
+
+# --- Capabilities ------------------------------------------------------------
+
+capabilities:
+  # --- Auth (Phase 1) ---
+  - id: "CAP-013"
+    statement: "New users can self-register with email and password."
+    value: "Gate to the entire app — every other capability requires an account."
+    priority: high
+    status: "planned"
+    depends_on: []
+    notes: "Self-signup chosen over invite-only for launch simplicity. Friends/family scale."
+
+  - id: "CAP-014"
+    statement: "Users can log in and log out; their cards, libraries, and study state are private to their account."
+    value: "Multi-user data isolation. Without this, nothing else is usable."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-013"]
+    notes: ""
+
+  - id: "CAP-015"
+    statement: "User can reset their password via email."
+    value: "Basic account recovery — avoids support burden for locked-out users."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-013"]
+    notes: ""
+
+  # --- Core card model + creation (Phase 1–2) ---
+  - id: "CAP-002"
+    statement: "User can create cards with a rich-text front (question) and back (answer), optionally with images."
+    value: "The fundamental unit of content. Cards are the database everything else operates on."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Rich-text front/back is the confirmed format. Images optional at launch."
+
+  - id: "CAP-008"
+    statement: "User can create new cards directly in the web UI."
+    value: "In-app authoring — the primary creation path for individual users."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: ""
+
+  - id: "CAP-009"
+    statement: "User can drag-and-drop files to import cards."
+    value: "Import path for users migrating from other apps or bulk-creating content."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Supported file formats TBD — see OPQ-002."
+
+  - id: "CAP-010"
+    statement: "User can bulk-import cards from a structured file (CSV or JSON)."
+    value: "Structured bulk import for programmatic card creation by the user."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: ""
+
+  # --- Card libraries (Phase 2) ---
+  - id: "CAP-004"
+    statement: "User can organize cards into named libraries."
+    value: "Primary organizational unit. Libraries scope study sessions and sharing (future)."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: ""
+
+  - id: "CAP-005"
+    statement: "A card can belong to multiple libraries simultaneously."
+    value: "Critical differentiator — same card can appear in 'Biology 101' and 'MCAT prep' without duplication."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-004"]
+    notes: "Multi-library membership is rare in competing apps; a key design commitment."
+
+  - id: "CAP-006"
+    statement: "User can add or remove cards from a library without affecting per-card spaced repetition state."
+    value: "Libraries are organizational containers, not study-state containers. Removing a card from a library shouldn't reset its SR schedule."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-004"]
+    notes: "This is a key design invariant: SR state is per-user per-card, orthogonal to library membership."
+
+  # --- Study session (Phase 3) ---
+  - id: "CAP-007"
+    statement: "User can mark which cards are 'active' — only active cards appear in study sessions."
+    value: "Lets users control study volume without deleting or reorganizing cards."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-004"]
+    notes: "Active flag is per-user per-card. Suspending a card preserves its SR history."
+
+  - id: "CAP-001"
+    statement: "User can review due cards on a spaced repetition schedule: flip a card, rate recall (again/hard/good/easy), and advance to the next due card."
+    value: "Core value proposition. The study loop that drives long-term retention via active recall + SRS."
+    priority: high
+    status: "planned"
+    depends_on: ["CAP-004", "CAP-007"]
+    notes: "Spaced repetition algorithm choice deferred to SA (SM-2 suggested by user, not binding)."
+
+  - id: "CAP-003"
+    statement: "User sees real-time session counts: cards due today, cards reviewed this session, cards remaining."
+    value: "In-session orientation — reduces anxiety and helps users pace their study."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-001"]
+    notes: ""
+
+  # --- Progress, stats & reminders (Phase 4) ---
+  - id: "CAP-016"
+    statement: "User can see study stats: cards studied today, current streak (consecutive days), total cards in circulation."
+    value: "Motivation feedback loop. Streaks are proven engagement drivers in competing apps."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-001"]
+    notes: ""
+
+  - id: "CAP-018"
+    statement: "User can see per-card history: last reviewed, success rate, next review date."
+    value: "Transparency into the algorithm — builds trust and lets power users optimize."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-001"]
+    notes: ""
+
+  - id: "CAP-017"
+    statement: "User receives a daily push notification or email reminder to study (opt-in)."
+    value: "Re-engagement channel. Opt-in prevents annoyance; reminders are a top-requested feature in SRS apps."
+    priority: low
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Low priority for launch; can ship after core study loop stabilizes."
+
+  # --- Data portability + search (Phase 4) ---
+  - id: "CAP-019"
+    statement: "User can export all their cards and spaced repetition state as a downloadable file (structured format)."
+    value: "Eliminates lock-in fear — a major conversion blocker surfaced by competitive research."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Export format TBD (JSON or CSV); should include card data + per-card SR state."
+
+  - id: "CAP-020"
+    statement: "User can search across all their cards by text content."
+    value: "Findability at scale. Becomes essential once a user has 100+ cards."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Full-text search; scope is the user's own cards only."
+
+  # --- API token + programmatic card creation (Phase 5) ---
+  - id: "CAP-011"
+    statement: "User can generate and manage a personal API token for programmatic card creation."
+    value: "Enablement for AI agent integration — the user controls who can create cards on their behalf."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Personal token concept. User can view, revoke, and regenerate tokens. See OPQ-003."
+
+  - id: "CAP-012"
+    statement: "External agents can create cards and assign them to a specific user's libraries via REST API with a personal token."
+    value: "Unique differentiator — no major consumer SRS app offers this. Enables AI-generated deck deployment."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-011"]
+    notes: "Token identifies the calling agent; the agent specifies target library in the request. See OPQ-003."
+
+  # --- Mind maps (Phase 6) ---
+  - id: "CAP-021"
+    statement: "User can place and move notes on a blank mind map canvas, accessed as a section/tab within the study app."
+    value: "Second content mode. Integrated into same app for unified UX and shared infrastructure."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-014"]
+    notes: "Same-app decision confirmed. Mind maps share auth and backend with flashcards."
+
+  - id: "CAP-022"
+    statement: "User can save, load, add, and delete their mind maps."
+    value: "Persistence for mind maps — without this, the canvas is disposable."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-021"]
+    notes: ""
+
+  - id: "CAP-023"
+    statement: "Mind maps are private per-user account."
+    value: "Data isolation — same privacy model as flashcards."
+    priority: medium
+    status: "planned"
+    depends_on: ["CAP-021"]
+    notes: ""
+
+  # --- Platform (Phase 7) ---
+  - id: "CAP-024"
+    statement: "The app is phone-first responsive — usable on phone, tablet, and desktop."
+    value: "Phone-first sizing was a founding constraint. Users study on their phones."
+    priority: high
+    status: "planned"
+    depends_on: []
+    notes: "This is a cross-cutting quality attribute, not a feature. Applies to every screen."
+
+  - id: "CAP-025"
+    statement: "User can install the app to their phone home screen as a PWA."
+    value: "Installable web app — one tap to open, no app store friction."
+    priority: low
+    status: "planned"
+    depends_on: ["CAP-024"]
+    notes: "Low priority for launch; progressive enhancement after core flows work in-browser."
+
+# --- External Constraints -----------------------------------------------------
+
+external_constraints:
+  - id: "EXT-001"
+    statement: "Deployment must target Railway Hobby tier."
+    reason: "User-confirmed hard constraint. All architectural decisions must respect Hobby tier limits (RAM, CPU, concurrency, no persistent disk outside volumes)."
+    source: "User (product-input.md, affirmed in strategist session 2026-05-19)"
+
+# --- Out of Scope -------------------------------------------------------------
+
+out_of_scope: []
+
+# --- Open Questions -----------------------------------------------------------
+
+open_questions:
+  - id: "OPQ-001"
+    statement: "What card types beyond rich-text front/back are needed? (cloze deletion, type-in-answer, audio, multiple choice?) Which are launch vs deferred?"
+    blocks: ["CAP-002"]
+    notes: "Rich-text front/back confirmed as MVP. Additional types are undefined."
+
+  - id: "OPQ-002"
+    statement: "What file formats are accepted for drag-and-drop import? (CSV, JSON, Anki APKG, plain text?)"
+    blocks: ["CAP-009"]
+    notes: "CSV and JSON confirmed for structured import (CAP-010). Drag-and-drop format support still open."
+
+  - id: "OPQ-003"
+    statement: "How does an external agent specify which user and library receive cards via the API? The personal token identifies the agent — does it need per-user targetting too?"
+    blocks: ["CAP-011", "CAP-012"]
+    notes: "Token-based auth concept floated. Authorization model (token scope, user targetting) needs definition."
+
+  - id: "OPQ-004"
+    statement: "What is the reference documentation section concretely? (user-authored markdown pages, imported PDFs, external links?)"
+    blocks: []
+    notes: "Mentioned as 'tertiary' in product input. Scope is undefined; may become a DEF item or be dropped."
+
+  - id: "OPQ-005"
+    statement: "What node types are expected on the mind map canvas? (text-only? images? links between nodes?)"
+    blocks: ["CAP-021"]
+    notes: "'Movable notes on blank canvas' was the stated scope. Additional node types may expand scope."
+
+# --- Deferred -----------------------------------------------------------------
+
+deferred:
+  - id: "DEF-001"
+    statement: "User can join multiple groups (e.g., per-class groups) with shared libraries per group."
+    reason: "Replaces the original 'home' concept with multi-group membership. Significant data model and permission complexity."
+    revisit: "After core multi-user auth (CAP-013, CAP-014) and libraries (CAP-004) ship and stabilize."
+
+  - id: "DEF-002"
+    statement: "User can review due cards without internet access; reviews sync when connectivity returns (PWA offline)."
+    reason: "Important for phone-first experience but adds significant sync complexity. PWA baseline (CAP-025) ships first."
+    revisit: "After PWA install (CAP-025) ships and in-browser study loop (CAP-001) is stable."
+
+  - id: "DEF-003"
+    statement: "User can share a card library (read-only) with another user via a link."
+    reason: "Not day 1. Sharing introduces permission model complexity."
+    revisit: "After libraries (CAP-004) and multi-library membership (CAP-005) ship."
+
+  - id: "DEF-004"
+    statement: "User can browse and import public/shared card libraries created by others."
+    reason: "Not day 1. Requires a public library ecosystem and discovery UI."
+    revisit: "After library sharing (DEF-003) ships."
+
+  - id: "DEF-005"
+    statement: "User can generate flashcards from mind map content (AI-assisted)."
+    reason: "Depends on mind maps (CAP-021–023) being stable and AI integration being feasible within Railway Hobby constraints."
+    revisit: "After mind maps (CAP-021–023) ship and AI generation patterns are proven."
+
+  - id: "DEF-006"
+    statement: "User can create and edit basic text notes as a third content mode."
+    reason: "User envisioning: notes → AI → flashcards pipeline. Long-term vision; not for MVP or v2."
+    revisit: "After mind maps (CAP-021–023) and AI-generated flashcards (DEF-005) ship."
+
+  - id: "DEF-007"
+    statement: "User can generate flashcards from note content (AI-assisted)."
+    reason: "Depends on notes mode (DEF-006) and AI generation (DEF-005)."
+    revisit: "After notes mode (DEF-006) and mind-map-to-flashcards (DEF-005) ship."
+
+  - id: "DEF-008"
+    statement: "Reference documentation section."
+    reason: "Mentioned as tertiary; scope undefined (see OPQ-004). Parked until clarified."
+    revisit: "After OPQ-004 is resolved."
