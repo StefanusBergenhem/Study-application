@@ -1,0 +1,79 @@
+# review_ready.yaml — Build completion report
+#
+# Written by: wf-skill-build (loaded by the wf-build agent) after preflight passes and commit lands
+# Read by:    wf-skill-review (loaded by the wf-review agent) at the start of the review phase
+# Deleted by: wf-skill-review on APPROVED verdict; overwritten by wf-skill-build on fix-mode resubmit
+#
+# Default path: paths.review_ready (default .workflow/.transient/review_ready.yaml)
+#
+# This file is transient — it carries the build's claim of "done" to the reviewer.
+# The diff is always ground truth; this report exists to surface evidence the
+# reviewer would otherwise have to reconstruct (TDD failure output, preflight log
+# tails, coverage numbers, test execution status).
+
+version: 1
+task_id: "X.Y.Z"
+status: completed                          # completed | design_issue
+# design_issue_id: "DI-NNN"                # Only when status == design_issue
+
+files_modified:
+  - "src/module/feature.ts"
+  - "src/module/feature.test.ts"
+
+tdd_evidence:
+  red_phase:
+    ran: true
+    failure_output: |
+      # Paste the actual failure messages from the Red phase here.
+      # Reviewer rejects with `tdd_missing` if this is empty, vague, or fabricated.
+      FAIL src/module/feature.test.ts
+      ✕ expected doThing() to return 42, received undefined
+      ✕ expected handleError() to throw InvalidInput, received no error
+      Tests: 3 failed, 0 passed
+  green_phase:
+    ran: true
+    all_passing: true
+  refactor_phase:
+    ran: true
+    lint_clean: true
+
+preflight:
+  command: "<commands.preflight from config>"
+  result: "PASS"                           # PASS | FAIL
+  log_tail: |
+    # Last 10 lines of the relevant /tmp/*.log
+    All checks passed.
+
+coverage_metrics:
+  tool: "<commands.coverage from config>"  # Or "not_configured" if commands.coverage is unset
+  threshold: 90                            # From coverage.threshold in config
+  files:
+    - file: "src/module/feature.ts"
+      line_coverage: 92.3
+      branch_coverage: 85.7
+      status: "pass"                        # pass | fail
+    - file: "src/module/handler.ts"
+      line_coverage: 78.1
+      branch_coverage: 70.0
+      status: "fail"
+
+test_files_created:
+  unit:
+    - "src/module/feature.test.ts"
+  integration: []
+  e2e: []
+
+integration_tests:
+  status: "not_applicable"                  # pass | fail | not_runnable | not_applicable
+  warning: ""                               # Non-empty when status is not_runnable
+  command: "<commands.test_integration from config>"
+  log_tail: ""
+  files_created: []
+
+e2e_tests:
+  status: "not_applicable"                  # pass | fail | not_runnable | not_applicable
+  warning: ""
+  files_created: []
+
+doc_updates_applied:
+  - "docs/API.md"

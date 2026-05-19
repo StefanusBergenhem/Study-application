@@ -1,0 +1,101 @@
+# Task Contract — paths.current_task (default: .workflow/.transient/current_task.yaml)
+#
+# Written by the orchestrator (wf-skill-orchestrate) when dispatching a task to
+# a build worktree. The orchestrator extracts ONE entry from sprint.yaml's
+# `tasks:` list and writes it here in standalone form. Build and review skills
+# read this file as the single source of truth for what the task requires.
+#
+# Field set is intentionally aligned with one task entry in
+# wf-skill-swa/assets/sprint.yaml.tmpl — the orchestrator does a verbatim
+# extract, with one rename at the slice boundary: sprint.yaml uses `id:` for
+# the in-list key, the standalone slice uses `task_id:` as the top-level key.
+#
+# Do NOT edit during build. Scope changes flow through build_blocked.yaml ->
+# orchestrator amendment, not direct edits.
+
+# ---- Task Identity ----
+task_id: ""                       # e.g. "S1.1" — matches sprint.yaml task.id
+title: ""
+status: "pending"                 # pending | in_progress | done | blocked | escalated
+component: ""                     # Owning component from COMPONENTS.yaml
+depends_on: []
+risk: "low"                       # low | medium | high
+
+# ---- Spec-Layer Slice ----
+# Verbatim copies from paths.components. Build and review agents derive test
+# oracles and traceability checks from these — do not summarise or paraphrase.
+
+# REQ(s) copied verbatim from components.<name>.requirements. Every
+# acceptance_criterion below MUST trace back to one of these REQ ids
+# (format: "AC-N (REQ-NNN): ...").
+requirements_extract:
+  - id: ""                        # e.g. REQ-AUTH-001
+    statement: ""                 # EARS-form statement, verbatim from the component
+    acceptance_criteria:
+      - ""                        # Verifiable criterion attached to this REQ
+
+# DbC block(s) copied verbatim from components.<name>.exposes. Omit this
+# field entirely if the task touches no contract-bearing interface. When
+# present, build agents derive test oracles from postconditions,
+# typed_errors, and invariants.
+parent_interface:
+  - name: ""                      # e.g. AuthMiddleware.Validate
+    preconditions:
+      - ""
+    postconditions:
+      on_success:
+        - ""
+      # Add one `on_<TypedError>:` block per error case the interface signals.
+    typed_errors:
+      - { name: "", when: "" }
+    invariants:
+      - ""
+    style: ""                     # tolerant | strict
+
+# ---- Acceptance Criteria ----
+# Each criterion is independently verifiable AND carries a (REQ-NNN) trace
+# handle pointing into requirements_extract above.
+acceptance_criteria:
+  - ""                            # e.g. "AC-1 (REQ-AUTH-001): ..."
+
+# ---- File Boundaries (enforced by scope-guard) ----
+# Files the build agent is authorized to CREATE or MODIFY. Anything not
+# listed here is off-limits — scope changes go through build_blocked.yaml.
+files_to_touch:
+  - ""
+
+# Files the build agent may READ for understanding. READ-ONLY — modifying
+# a context file is a scope violation.
+context_to_load:
+  - ""
+
+# Boundaries the developer might be tempted to cross.
+out_of_scope:
+  - ""
+
+# ---- Testing Mandate ----
+# For single-target tasks, use the flat format (description + covers).
+# For multi-target tasks (2+ functions/files), use the grouped format
+# (target + nested tests) — see wf-skill-swa/SKILL.md for rules.
+testing_mandate:
+  unit_tests:
+    - description: ""
+      covers: ""                  # Which acceptance criterion this test validates
+  integration_tests:
+    - description: ""
+      covers: ""
+  e2e_tests: []
+  # If integration_tests or e2e_tests are empty for a task touching external
+  # deps or user-facing flows, add a justification comment here.
+
+# ---- Documentation Updates ----
+doc_updates_required:
+  - path: ""
+    action: ""
+    category: ""                  # codebase | conventions | adr
+
+# ---- Implementation Notes ----
+# SwA-authored guidance for the developer: governing ADRs, domain commands
+# that apply, data-fetching patterns, defensive branch hints, etc.
+implementation_notes: |
+

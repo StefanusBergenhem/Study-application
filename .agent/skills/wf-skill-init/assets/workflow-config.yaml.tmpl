@@ -1,0 +1,170 @@
+# .workflow/config.yaml — Project workflow configuration
+# This template is owned by wf-skill-init. It is the canonical source of truth
+# for every paths.* entry, command, and tuning field. Every skill reads from
+# config via paths.*; no skill hardcodes a path.
+#
+# Defaults route every artifact under .workflow/. Per-run handoff state lives
+# under .workflow/.transient/ (gitignored). Persistent artifacts live at the
+# .workflow/ root (git-tracked).
+#
+# Projects may override any path here. Common override: route the spec layer
+# (components, adrs, master_backlog, sprint, roadmap, memory, state, conventions)
+# to an existing docs/ tree to keep them visible.
+#
+# Template variables ({{VAR}}) are substituted by wf-skill-init during fresh
+# mode. Patch mode treats them as valid leaf placeholders.
+
+version: 4
+
+project:
+  name: "{{PROJECT_NAME}}"
+  language: "{{LANGUAGE}}"
+
+paths:
+  # --- Persistent artifacts (under .workflow/ root by default) -----------------
+  roadmap: ".workflow/roadmap.yaml"                       # wf-skill-strategist
+  components: ".workflow/COMPONENTS.yaml"                 # wf-skill-sa
+  adrs: ".workflow/adrs"                                  # wf-skill-sa (directory; one .md per ADR)
+  master_backlog: ".workflow/master_backlog.yaml"         # wf-skill-sa
+  sprint: ".workflow/sprint.yaml"                         # wf-skill-swa (sprint-scoped, replaced each sprint)
+  memory: ".workflow/MEMORY.yaml"                         # wf-skill-continuous-learning
+  state: ".workflow/STATE.md"                             # wf-skill-init scaffolds; wf-skill-review appends
+  conventions: ".workflow/CONVENTIONS.md"                 # wf-skill-init scaffolds; user-edited
+  retrospective: ".workflow/retrospective"                # wf-skill-retrospective (directory)
+  archive_retrospective: ".workflow/archive/retrospective" # wf-skill-continuous-learning (directory)
+  wf_candidates: ""                                       # Optional markdown file. When set, wf-skill-continuous-learning
+                                                          # routes `process_rules` lessons (wf-toolkit / pipeline improvements)
+                                                          # to this file instead of MEMORY.yaml. Useful when the project
+                                                          # co-develops the wf toolkit in-tree (set to e.g. "wf/docs/CANDIDATES.md").
+                                                          # Leave empty for normal projects — process_rules then land in MEMORY.yaml.
+  source_root: "."                                        # Project root for orphan / source scans
+
+  # --- Transient artifacts (per-run handoff; gitignored) -----------------------
+  # Convention: all transient paths default beneath .workflow/.transient/.
+  # Override individual paths below if a project needs a different layout.
+  pipeline_state: ".workflow/.transient/pipeline_state.yaml"           # wf-skill-orchestrate
+  stage_manifest: ".workflow/.transient/stage_manifest.yaml"           # wf-skill-orchestrate
+  current_task: ".workflow/.transient/current_task.yaml"               # wf-skill-orchestrate (per-dispatch)
+  review_ready: ".workflow/.transient/review_ready.yaml"               # wf-skill-build
+  feedback: ".workflow/.transient/feedback.yaml"                       # wf-skill-review (per-task)
+  build_progress: ".workflow/.transient/build-progress.yaml"           # wf-skill-build
+  build_blocked: ".workflow/.transient/build-blocked.yaml"             # wf-skill-build
+  design_issues: ".workflow/.transient/design_issues.yaml"             # Aggregate (wf-skill-orchestrate owns; build/review append)
+  arbitrator_feedback: ".workflow/.transient/arbitrator_feedback.yaml" # wf-skill-arbitrator-review
+  arbitrator_escalation: ".workflow/.transient/arbitrator_escalation.yaml" # wf-skill-arbitrator-review
+  components_drift: ".workflow/.transient/components_drift.yaml"       # wf-skill-sa drift detector output
+  architecture_html: ".workflow/.transient/architecture.html"          # Output path for .workflow/scripts/render_spec_html.sh
+                                                                       # (the human-facing spec-layer viewer copied in by wf-skill-init).
+                                                                       # Re-render any time COMPONENTS.yaml or paths.adrs change. Move out of
+                                                                       # .transient/ (e.g. "doc/architecture.html") if you want to commit it.
+
+source_globs:                    # File patterns counted as "source" by the drift detector
+  # If empty, orphan + oversized checks are skipped (path_missing + path_collision still run).
+  # Examples:
+  #   - "**/*.go"
+  #   - "**/*.py"
+  #   - "**/*.ts"
+  #   - "**/*.tsx"
+  []
+
+commands:
+  test_unit: "{{TEST_UNIT_CMD}}"
+  test_integration: "{{TEST_INTEGRATION_CMD}}"
+  test_e2e: "{{TEST_E2E_CMD}}"
+  lint: "{{LINT_CMD}}"
+  type_check: "{{TYPE_CHECK_CMD}}"
+  preflight: "{{PREFLIGHT_CMD}}"
+  coverage: "{{COVERAGE_CMD}}"            # e.g., "npx jest --coverage", "go test -coverprofile=coverage.out ./...", "pytest --cov"
+  db_validate: "{{DB_VALIDATE_CMD}}"      # e.g., "npx prisma migrate status", "alembic check"
+  scan_components: ""                     # Optional project-supplied drift hook for language-specific checks
+                                          # (exposes/owns/imports). Invoked once per component as:
+                                          #   <command> <component-name> <component-path>
+                                          # Component YAML block fed on stdin; stdout must be a YAML
+                                          # fragment matching the hook contract (see wf-skill-sa/assets/scripts/).
+                                          # Leave empty to run only generic checks.
+  scan_components_timeout: 30             # Per-component hook timeout in seconds
+
+coverage:
+  threshold: 90                            # Minimum line coverage % for new / modified files
+  enforce_on_new_files: true               # Require coverage check on files created by the task
+  enforce_on_modified_files: true          # Require coverage check on files modified by the task
+  integration_test_ratio: "per_external_dep"  # At least one integration test per external dependency interaction
+
+review:
+  max_attempts: 3
+  escalation: halt
+  max_scope_amendments: 1          # How many times the orchestrator may auto-amend files_to_touch per task on
+                                   # scope-expansion HALT (0 = always escalate to human)
+
+parallel:
+  enabled: true
+  worktree_base: ".agent/worktrees"
+  max_concurrent_tasks: 4
+
+models:
+  build: "sonnet"            # Model for build sub-agents (task contracts are tight, Sonnet suffices)
+  review: "sonnet"           # Model for review sub-agents (checklist-driven validation)
+  retrospective: "sonnet"    # Model for retrospective sub-agents
+
+task_sizing:
+  max_files_to_touch: 3
+  max_context_files: 5
+  max_estimated_lines: 150
+
+learning:
+  enabled: true                            # Set false to skip lesson extraction and archival
+  max_memory_entries: 30                   # Max lessons in the memory file
+  archive_retrospectives: true             # Move retrospective .md to paths.archive_retrospective
+  cleanup_design_issues: true              # Remove resolved design issues after extraction
+
+external_skills:
+  # Project-wide external skill defaults. Applied to every task regardless of
+  # which domain its files match. Domain-specific skills are declared under
+  # `domains:` below and merged on top.
+  defaults:
+    implementation: []    # e.g., ["tdd"]
+    testing: []           # e.g., ["golang-testing"]
+    review: []            # e.g., ["requesting-code-review"]
+
+domains:
+  # Per-domain configuration for multi-language or multi-toolchain projects.
+  # Each domain declares glob patterns (`match`) tested against a task's
+  # `files_to_touch`. When any file matches, the domain's slots contribute
+  # to the resolved configuration for that task.
+  #
+  # --- Resolution rules ---
+  #   conventions  : merge as a reading list (project default + every matching
+  #                  domain's conventions). Builder + reviewer read all that
+  #                  apply.
+  #   skills       : merge (external_skills.defaults + every matching domain's
+  #                  skills, additive per slot).
+  #   commands     : override key-by-key. If files span multiple domains with
+  #                  command sections, the domain with the most file matches
+  #                  wins (ties: first alphabetically). Only keys present in
+  #                  the domain's `commands` are overridden; others keep the
+  #                  top-level value.
+  #
+  # Single-language projects can leave this empty — top-level `commands:` +
+  # project-wide `paths.conventions` cover everything.
+  #
+  # backend:
+  #   match: ["backend/**", "**/*.go", "cmd/**", "internal/**"]
+  #   conventions: "doc/backend/CONVENTIONS.md"
+  #   skills:
+  #     implementation: ["golang-patterns"]
+  #     testing: ["golang-testing"]
+  #   commands:                              # Only keys that DIFFER from top-level
+  #     test_unit: "go test ./..."
+  #     test_integration: "go test -tags=integration ./..."
+  #     lint: "golangci-lint run"
+  # frontend:
+  #   match: ["frontend/**", "**/*.tsx", "**/*.ts", "src/components/**"]
+  #   conventions: "doc/frontend/CONVENTIONS.md"
+  #   skills:
+  #     implementation: ["frontend-patterns"]
+  #     testing: ["vitest"]
+  #   commands:
+  #     test_unit: "npx vitest run"
+  #     lint: "npx eslint ."
+  #     type_check: "tsc --noEmit"
+  {}

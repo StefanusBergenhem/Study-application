@@ -1,0 +1,15 @@
+# COMPONENTS.yaml — Component registry and architecture governance
+# Place this file in the project root.
+# Maintained by the Solution Architect (/wf-skill-sa).
+
+system_requirements:
+  # SYS-REQ-NNN — user-visible behavior, cross-cutting NFRs, system-wide invariants
+
+components:
+  # Component definitions with EARS requirements, DbC exposes, and governance
+
+conventions:
+  # Repository-hygiene rules (CONV-NNN)
+
+dependency_rules:
+  # Directional import constraints between components

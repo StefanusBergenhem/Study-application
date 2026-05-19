@@ -1,0 +1,203 @@
+# COMPONENTS.yaml — Component registry and architecture governance
+# Place this file in the project root.
+# Maintained by the Solution Architect (/wf-skill-sa).
+#
+# Two requirement tiers (see
+# skills/wf-skill-spec-references/references/ears-syntax.md §Tier placement):
+#   - system_requirements:        SYS-REQ-NNN — user-visible behavior,
+#                                 cross-cutting NFRs, system-wide invariants.
+#                                 Allocated to one or more components.
+#   - components[*].requirements: REQ-<COMP>-NNN — interface contracts and
+#                                 component-local obligations. A component REQ
+#                                 may carry derives_from: [SYS-REQ-NNN] when it
+#                                 implements a piece of a system requirement.
+#
+# Each component carries:
+#   - requirements: structured EARS-form statements of what this component must do
+#   - exposes: what other components can use — plain symbols for data types, or
+#     interface blocks with Design-by-Contract (DbC) clauses where a contract matters
+#   - depends_on, constraints, status, governed_by_adrs: dependency, sizing,
+#     health, and governance fields
+#
+# Format references for the SA:
+#   - skills/wf-skill-spec-references/references/ears-syntax.md   (requirement shape + tier placement)
+#   - skills/wf-skill-spec-references/references/dbc-clauses.md   (DbC fields, where applicable)
+#   - skills/wf-skill-spec-references/references/adr-threshold.md (ADR threshold + governs_components)
+#   - skills/wf-skill-spec-references/references/conventions.md   (conventions block — repository-hygiene rules)
+
+system_requirements:
+  # Requirements that describe what the SYSTEM promises, not what any single
+  # component owns. Three flavours:
+  #
+  #   functional  — user/operator-visible behavior crossing >1 component
+  #   nfr         — cross-cutting non-functional (latency, throughput, security)
+  #   invariant   — a system-wide rule every component must respect
+  #
+  # Allocate each SYS-REQ to the components that implement it via the
+  # `allocated_to:` field. The mirror on the component side is `derives_from:`
+  # on the implementing component REQ. The arbitrator checks symmetry.
+  #
+  # ── Example: user-visible behavior crossing components ──
+  #
+  # - id: SYS-REQ-001
+  #   type: functional
+  #   statement: "When an operator submits credentials, the system shall return
+  #     a session token within 200ms p95."
+  #   acceptance_criteria:
+  #     - "Valid credentials produce a non-empty token and 200 status within 200ms p95."
+  #     - "Invalid credentials produce AuthRejected and 401 within 200ms p95."
+  #   allocated_to: [api-gateway, auth]
+  #   traces_to: [CAP-001]
+  #
+  # ── Example: cross-cutting NFR (nfr_elements IS the verification handle;
+  #              acceptance_criteria omitted per ears-syntax §Per-type policy) ──
+  #
+  # - id: SYS-REQ-002
+  #   type: nfr
+  #   statement: "While serving traffic, the system shall keep end-to-end
+  #     UI-to-response latency at or below 250ms p95 under typical load."
+  #   allocated_to: [api-gateway, auth, database]
+  #   traces_to: [CAP-002]
+  #   nfr_elements:
+  #     subject:   "end-to-end UI-to-response latency"
+  #     metric:    "wall-clock milliseconds, p95"
+  #     threshold: "≤ 250ms"
+  #     condition: "200 concurrent requests, 5-minute window"
+  #     source:    "SLA target"
+  #
+  # ── Example: system-wide invariant — multi-facet, so AC is justified ──
+  #
+  # - id: SYS-REQ-003
+  #   type: invariant
+  #   statement: "The system shall represent every user as a single canonical
+  #     User record exchanged by all layers without per-layer transformation."
+  #   acceptance_criteria:
+  #     - "The User type is defined once in src/domain and imported by every component handling user identity."
+  #     - "No component defines its own user representation."
+  #     - "JSON serialisation uses stable field names across versions."
+  #   allocated_to: [domain]
+  #   traces_to: [ADR-002]
+
+components:
+  # ── Example: pure-data component (no DbC needed) ──
+  #
+  # domain:
+  #   path: src/domain/
+  #   requirements:
+  #     - id: REQ-DOM-001
+  #       type: data
+  #       statement: "The system shall define a canonical User record consumed by all
+  #         layers without per-layer transformation."
+  #       acceptance_criteria:
+  #         - "User struct has fields: id (UUID), email (string), created_at (timestamp)."
+  #         - "User is JSON-serialisable with stable field names across versions."
+  #       traces_to: [CAP-001, ADR-002]
+  #   exposes:
+  #     - User
+  #     - UserID
+  #   depends_on: []
+  #   constraints:
+  #     max_source_files: 5
+  #     max_exported_symbols: 10
+  #   status: OK
+  #   governed_by_adrs: [ADR-002]
+  #
+  # ── Example: component with a contract worth specifying ──
+  #
+  # auth:
+  #   path: src/auth/
+  #   requirements:
+  #     - id: REQ-AUTH-001
+  #       type: functional
+  #       statement: "When given a valid bearer token, the system shall return the
+  #         decoded user identity."
+  #       acceptance_criteria:
+  #         - "Tokens signed with the project's RS256 key are accepted."
+  #         - "Expired tokens are rejected with AuthExpiredError."
+  #         - "Tampered tokens are rejected with AuthInvalidError."
+  #       derives_from: [SYS-REQ-001]    # allocates a slice of SYS-REQ-001 to this component
+  #       traces_to: [CAP-003]
+  #     - id: REQ-AUTH-002
+  #       type: nfr
+  #       # No acceptance_criteria — nfr_elements is the verification handle.
+  #       statement: "While serving traffic, the system shall keep token-validation
+  #         latency at or below 50ms p95 under 200 concurrent requests."
+  #       derives_from: [SYS-REQ-002]    # this component's budget for the cross-cutting NFR
+  #       traces_to: [REQ-AUTH-001]
+  #       nfr_elements:
+  #         subject: "token-validation latency"
+  #         metric: "wall-clock milliseconds, p95"
+  #         threshold: "≤ 50ms"
+  #         condition: "200 concurrent requests, 5-minute window"
+  #         source: "engineering judgment + SLA target"
+  #   exposes:
+  #     - name: AuthMiddleware.Validate
+  #       signature:
+  #         parameters:
+  #           - { name: token, type: string }
+  #         return_type: "(User, error)"
+  #       preconditions:
+  #         - "token is a non-empty string."
+  #       postconditions:
+  #         on_success:
+  #           - "Returned User.id matches the token's `sub` claim."
+  #           - "Returned User.email is the address present in the token's `email` claim."
+  #         on_AuthExpiredError:
+  #           - "Token's `exp` claim is in the past."
+  #         on_AuthInvalidError:
+  #           - "Signature verification failed OR required claim missing."
+  #       invariants: []                        # stateless interface
+  #       typed_errors:
+  #         - { name: AuthExpiredError,  when: "Token's exp claim is in the past." }
+  #         - { name: AuthInvalidError,  when: "Signature/claim verification failed." }
+  #       style: tolerant                       # accepts any string; signals typed errors for bad input
+  #     - SessionStore                          # plain exposed symbol; no DbC block needed
+  #   depends_on: [database, user-service]
+  #   constraints:
+  #     max_source_files: 20
+  #     max_exported_symbols: 15
+  #   status: OK
+  #   governed_by_adrs: [ADR-007]               # ADRs that shape this component's design
+
+conventions:
+  # Repository-hygiene rules with ids — peer to system_requirements and
+  # dependency_rules. Conventions describe how the codebase is organized;
+  # REQs describe behavior the system promises to its users / callers.
+  #
+  # If you find yourself writing a "shall" sentence about routing, file
+  # layout, or technology choice, it likely belongs here instead of in
+  # `requirements:`. See `skills/wf-skill-spec-references/references/conventions.md`.
+  #
+  # Fields (all required except traces_to):
+  #   id          — CONV-NNN. Sequential. Stable across edits.
+  #   rule        — One sentence; declarative, not EARS "shall" form.
+  #   rationale   — One sentence on *why*. Cite the driver.
+  #   enforced_by — lint | ci-script | review | nothing
+  #   applies_to  — paths or globs scoping the rule (["**"] for repo-wide).
+  #   traces_to   — optional list of ADR ids (only when an ADR ratifies it).
+  #
+  # ── Example: review-enforced repo-organization rule ──
+  #
+  # - id: CONV-001
+  #   rule: "All HTTP calls to the backend go through the api wrapper layer — no inline fetch() in components."
+  #   rationale: "Single seam for auth headers, error normalisation, and mocking."
+  #   enforced_by: "review"
+  #   applies_to: ["frontend/src/components/**", "frontend/src/pages/**"]
+  #   traces_to: [ADR-030]
+  #
+  # ── Example: linter-enforced rule, no ADR ──
+  #
+  # - id: CONV-002
+  #   rule: "No `// nolint` or `eslint-disable` comments anywhere in source."
+  #   rationale: "Suppression bypasses the quality gate. Fix the underlying issue."
+  #   enforced_by: "ci-script"
+  #   applies_to: ["**"]
+
+dependency_rules:
+  # Directional import constraints between components — peer to conventions.
+  # Used by the import-graph checker. Conventions describe code-organization
+  # rules; dependency_rules describe structural import edges.
+  #
+  # Example:
+  # - "ui must not import from database"
+  # - "no circular dependencies"

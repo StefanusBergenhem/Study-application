@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}} — Architecture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="wf-skill-sa/scripts/render_spec_html.sh">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+{{CSS}}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div>
+    <div class="brand">wf · architecture</div>
+    <h1>{{H1_HTML}}</h1>
+  </div>
+  <div class="meta">
+    <div><strong>Generated</strong> {{GENERATED_AT}}</div>
+    <div>COMPONENTS.yaml · sha256:{{COMPONENTS_SHA_SHORT}}</div>
+    <div>{{ADR_COUNT}} ADRs · {{COMP_COUNT}} components · {{SYS_REQ_COUNT}} SYS-REQs · {{REQ_COUNT}} REQs</div>
+  </div>
+</header>
+
+<div class="subhead">
+  {{SUBHEAD_STATS}}
+</div>
+
+<div class="frame">
+
+  <aside class="rail" aria-label="Document navigation">
+    <div class="search">
+      <input type="search" placeholder="filter by id, text…" aria-label="filter">
+      <kbd>⌘K</kbd>
+    </div>
+
+    {{NAV_HTML}}
+
+    <div class="theme-toggle" role="button" tabindex="0">
+      <span class="dot"></span>
+      <span class="label">Dark mode</span>
+    </div>
+  </aside>
+
+  <main>
+
+    <section class="section" id="overview">
+      <h2><span class="num">§ 1</span>Overview</h2>
+      <p class="lede">{{OVERVIEW_LEDE}}</p>
+
+      <div class="cards">
+        {{OVERVIEW_CARDS}}
+      </div>
+
+      <div class="diagram-wrap">
+        <div class="mermaid">{{MERMAID_SRC}}</div>
+        <div class="caption">Component dependency graph. Click any node to jump to its section.</div>
+      </div>
+
+      {{DEPENDENCY_RULES_HTML}}
+    </section>
+
+    <section class="section" id="system-requirements">
+      <h2><span class="num">§ 2</span>System Requirements</h2>
+      <p class="lede">Tier-1 requirements — what the system promises across components. Each is allocated to one or more components below.</p>
+      {{SYS_REQ_HTML}}
+    </section>
+
+    {{CONVENTIONS_SECTION_HTML}}
+
+    <section class="section" id="components">
+      <h2><span class="num">§ {{COMP_SECTION_NUM}}</span>Components</h2>
+      <p class="lede">Each component carries its own EARS-form requirements (Tier 2), Design-by-Contract on contract-worthy interfaces, and the ADRs that govern its design.</p>
+      {{COMPONENTS_HTML}}
+    </section>
+
+    <section class="section" id="adrs">
+      <h2><span class="num">§ {{ADR_SECTION_NUM}}</span>Architecture Decisions</h2>
+      <p class="lede">One file per decision. Frontmatter records the components governed; the body records the context, choice, alternatives considered, and consequences.</p>
+      {{ADRS_HTML}}
+    </section>
+
+  </main>
+
+</div>
+
+<footer class="colophon">
+  <div>{{TITLE}} · architecture · generated {{GENERATED_AT}}</div>
+  <div>rendered by wf · skill <code>wf-skill-sa</code></div>
+</footer>
+
+<script id="spec-data" type="application/json">{{SPEC_JSON}}</script>
+<script>
+window.__SPEC__ = JSON.parse(document.getElementById("spec-data").textContent);
+{{JS}}
+</script>
+
+</body>
+</html>

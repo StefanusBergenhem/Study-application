@@ -1,0 +1,8 @@
+# docs/MEMORY.yaml — Project learning memory
+# Managed by wf-skill-continuous-learning after each sprint.
+# Consumed by build, review, SA, and SwA skills as context.
+
+version: 1
+max_entries: 30
+
+lessons: []

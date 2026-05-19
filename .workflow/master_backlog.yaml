@@ -1,0 +1,5 @@
+# master_backlog.yaml — Ordered backlog with sprint groupings
+# Produced by the Solution Architect (/wf-skill-sa).
+# Consumed by the Software Architect (/wf-skill-swa) to produce sprint.yaml.
+
+sprints: []

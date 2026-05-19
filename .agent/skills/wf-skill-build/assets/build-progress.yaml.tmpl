@@ -1,0 +1,85 @@
+# build-progress.yaml — Per-gate progress marker
+#
+# Written by: wf-skill-build (loaded by the wf-build agent), appended after each gate passes
+# Read by:    wf-skill-orchestrate when the build sub-agent returns without review_ready or build_blocked
+# Deleted by: wf-skill-build after successfully writing review_ready
+#
+# Default path: paths.build_progress (default .workflow/.transient/build-progress.yaml)
+#
+# PURPOSE
+# -------
+# Checkpoint journal. The build appends one entry to `gates` after each gate passes
+# and updates `last_step`. On abnormal termination (rate-limit kill, crash, timeout),
+# this file stays on disk; the orchestrator reads it to choose recovery action.
+#
+# RECOVERY ACTIONS (orchestrator reads last_step):
+#   "review_ready_written" → Agent finished; return signal lost.
+#                            Treat as completed. Proceed to review.
+#   "committed"            → Agent committed but did not write review_ready.
+#                            Treat as completed. Proceed to review.
+#   "all_gates_passed"     → Agent died after all gates but before commit.
+#                            Re-dispatch in fix-resume mode (gates_already_green: true).
+#                            Do NOT increment attempt counter.
+#   anything earlier       → Gates were not fully green when agent died.
+#                            Restart from scratch. Increment attempt counter.
+#   (file absent)          → No progress information available.
+#                            Restart from scratch. Increment attempt counter.
+#
+# On success: wf-skill-build deletes this file after writing review_ready.
+# Presence of this file on disk is always a sign that the build did not complete normally.
+
+task_id: "<task_id from current_task>"
+attempt: 1
+
+gates:
+  # Append one entry after each gate passes. Failed gates halt the build before
+  # this file is useful — the build is retried on the next attempt.
+  - gate: "lint"
+    status: passed                          # passed | failed
+    ts: "YYYY-MM-DDTHH:MM:SSZ"
+  - gate: "type_check"
+    status: passed
+    ts: "YYYY-MM-DDTHH:MM:SSZ"
+  - gate: "unit_tests"
+    status: passed
+    ts: "YYYY-MM-DDTHH:MM:SSZ"
+  - gate: "coverage"
+    status: passed
+    ts: "YYYY-MM-DDTHH:MM:SSZ"
+  # Optional gates — only when configured + applicable:
+  # - gate: "integration_tests"
+  #   status: passed
+  #   ts: "YYYY-MM-DDTHH:MM:SSZ"
+  # - gate: "e2e_tests"
+  #   status: passed
+  #   ts: "YYYY-MM-DDTHH:MM:SSZ"
+  - gate: "preflight"
+    status: passed
+    ts: "YYYY-MM-DDTHH:MM:SSZ"
+
+# last_step values (orchestrator matches on these exact strings):
+#
+#   "lint_passed"             — after lint gate
+#   "type_check_passed"       — after type-check gate
+#   "unit_tests_passed"       — after unit tests gate
+#   "coverage_passed"         — after coverage gate
+#   "integration_tests_passed"— after integration tests gate (if applicable)
+#   "e2e_tests_passed"        — after e2e tests gate (if applicable)
+#   "preflight_passed"        — after preflight gate
+#   "all_gates_passed"        — after ALL configured gates have passed
+#   "committed"               — after git commit
+#   "review_ready_written"    — after review_ready is written (this file is deleted immediately after)
+#
+last_step: "all_gates_passed"
+
+# Gate name reference:
+#
+#   Gate name            | Build phase
+#   ---------------------|--------------------------------------
+#   lint                 | Lint check (Step 2 / Refactor phase)
+#   type_check           | Type-check / compile check
+#   unit_tests           | Unit test suite (Green phase)
+#   coverage             | Coverage metric gate (Step 4)
+#   integration_tests    | Integration test suite (Step 4)
+#   e2e_tests            | E2E test suite (Step 4)
+#   preflight            | Full preflight command (Step 6)

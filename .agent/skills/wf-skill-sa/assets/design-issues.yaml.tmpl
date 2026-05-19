@@ -1,0 +1,30 @@
+# design_issues.yaml — Design issues surfaced during build / review / SA / SwA.
+#
+# Canonical shape and `fix_kind` taxonomy live in
+# wf-skill-spec-references/references/design-issues.md — load that document
+# before writing or routing a DI.
+
+issues:
+  # - id: "DI-001"
+  #   detected_by: "developer"             # developer | reviewer | software_architect | solution_architect
+  #   task_id: "S1.3"
+  #
+  #   # Load-bearing routing field. Orchestrator dispatches by this value.
+  #   # See wf-skill-spec-references/references/design-issues.md for the
+  #   # mechanical classification check the producer applies before writing.
+  #   fix_kind: "contract_amendment"       # contract_amendment | spec_amendment | unknown
+  #
+  #   # Advisory: who is expected to author the fix. Kept for backward
+  #   # compatibility with pre-fix_kind DIs and for human readability.
+  #   level: "software_architect"          # software_architect | solution_architect
+  #
+  #   summary: "One-line problem statement"
+  #   impact: "Scope of what the DI blocks (e.g., task S1.3 cannot proceed)"
+  #   status: "open"                       # open | routing | resolved | overridden
+  #
+  #   # Filled by the orchestrator when status flips to routing:
+  #   # routed_to: "wf-swa"                # wf-swa | wf-sa
+  #   # routed_at: "2026-05-19T15:30:00Z"
+  #
+  #   # Filled when status flips to resolved:
+  #   # resolution_commit: "abc1234"

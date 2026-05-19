@@ -1,0 +1,51 @@
+# arbitrator_escalation.yaml — Spec-layer review escalation (DESIGN_ISSUE)
+#
+# Written by: wf-skill-arbitrator-review when the problem lives upstream of SA's mandate
+# Lives at:   .workflow/.transient/arbitrator_escalation.yaml (paths.arbitrator_escalation)
+# Consumed by: human; routes to roadmap / strategist / direct human resolution
+#
+# Use this when the SA cannot fix the issue without input from a higher layer.
+# When in doubt, prefer REJECTED with a warn-severity finding — escalation is
+# expensive and should only fire when SA truly cannot resolve.
+
+verdict: ESCALATE
+iteration: 1
+reviewed_at: "{{ISO_TIMESTAMP}}"
+
+target_layer: roadmap                     # roadmap | strategist | human
+
+artifacts_reviewed:
+  - "<path to COMPONENTS.yaml>"
+  - "<path to docs/adrs/ directory>"
+
+# The root finding that triggered escalation. There's only one — escalation
+# preempts other findings, so we don't list symptoms.
+finding:
+  category: design-issue
+  artifact: "<file where the problem surfaces>"
+  field: "<YAML path or section>"
+  message: "<one-sentence description of why this cannot be fixed at SA layer>"
+  evidence: |
+    <Multi-line explanation. Cite specific REQ ids, ADR ids, roadmap
+    capability/external-constraint ids, or conflicting decisions that
+    demonstrate the upstream gap.>
+
+# What needs to happen upstream before SA can re-run.
+needed_input: |
+  <Specific request to the target layer. Examples:
+   - "Roadmap.yaml needs a capability that disambiguates X vs Y for component Z."
+   - "Strategist must reconcile: CAP-007 implies <choice A>, CAP-011 implies <choice B>."
+   - "Human decision needed on <specific question>.">
+
+# Optional: previous attempts (if this is a re-escalation after retry-cap exhaustion).
+# retry_history:
+#   - iteration: 1
+#     verdict: REJECTED
+#     blocks: 5
+#   - iteration: 2
+#     verdict: REJECTED
+#     blocks: 3
+#   - iteration: 3
+#     verdict: REJECTED
+#     blocks: 3
+#     note: "Same findings F-003, F-005, F-008 across all three iterations — fix mode not converging."

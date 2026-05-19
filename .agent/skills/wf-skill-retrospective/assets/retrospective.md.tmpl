@@ -1,0 +1,66 @@
+# Sprint <sprint-id> Retrospective
+
+## Summary
+
+- Sprint goal: <goal>
+- Tasks planned: N
+- Tasks completed: N (first attempt: N, after retries: N)
+- Tasks escalated: N
+- Tasks blocked: N
+- Design issues surfaced: N
+
+## What Worked
+
+- Task S1.1 ("Title"): Passed first attempt. Well-scoped, clear contract.
+- Task S1.2 ("Title"): Passed first attempt. Good test coverage mandate.
+- Stage 1 completed cleanly — no issues.
+
+## What Failed
+
+- Task S1.3 ("Title"): 2 rejections before escalation.
+  - Attempt 1 rejection: test_quality — tests were tautological (asserted return value without meaningful logic).
+  - Attempt 2 rejection: scope_violation — needed to touch file outside contract.
+  - Root cause: contract was missing a context file needed for the implementation.
+  - Category: contract quality issue.
+
+- Task S1.5 ("Title"): 1 rejection, then passed.
+  - Attempt 1 rejection: convention_violation — naming didn't match project patterns.
+  - Root cause: the project-wide `paths.conventions` document was silent on the relevant naming rule; the matching domain had no `conventions:` override.
+  - Category: convention coverage gap.
+
+## Design Issues Surfaced
+
+- DI-001: "Auth module needs direct DB access but dependency rules forbid it"
+  - Detected by: developer (during build).
+  - Impact: Task S1.3 blocked.
+  - Status: open — needs SA resolution.
+
+## Component Drift
+
+<!-- Include this section only if paths.components_drift was loaded. Omit entirely if absent. -->
+
+Totals: N findings (X error / Y warning / Z info)
+
+### Design issue candidates (require attention before next sprint)
+- `path_collision` — components `auth` and `users` declare overlapping paths. File as design issue: ambiguous ownership.
+
+### SA policy review (raise in next /wf-skill-sa)
+- `oversized` — component `api` has 24 source files; declared limit 20. Consider splitting or raising the constraint.
+- `exposes_drift` — component `auth` declares `[AuthMiddleware, SessionStore]` but code exports `[AuthMiddleware, SessionStore, NewRefreshToken]`. Update declared interface or hide the new export.
+
+### Informational
+- 3 `orphan` files. May indicate a missing component.
+
+## Suggested Improvements
+
+### Workflow
+- Add the missing naming rule to the matching `domains.<name>.conventions` document so the builder reads it via the Step 1a resolution rule (2 failures traced to this).
+
+### Architecture
+- Review auth/database boundary — DI-001 suggests the current boundary is too strict.
+
+### Task Sizing
+- Tasks in the "api" component took more attempts — consider lower size limits for this component.
+
+### Contract Quality
+- Ensure every task that modifies existing code includes the existing file in `context_to_load`.

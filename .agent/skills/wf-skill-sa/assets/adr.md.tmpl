@@ -1,0 +1,60 @@
+---
+# Architecture Decision Record — one decision per file.
+# Place files under `paths.adrs` (default: docs/adrs/), named `ADR-NNN-short-slug.md`.
+#
+# An ADR is warranted only when ALL three conditions hold (see
+# skills/wf-skill-spec-references/references/adr-threshold.md):
+#   1. Load-bearing — reversing it ripples beyond local scope.
+#   2. ≥2 real options existed, with real trade-offs.
+#   3. Contingent on assumptions that could plausibly change.
+#
+# Routine choices, defaults, or one-option-only decisions do NOT earn ADRs.
+
+id:                ADR-NNN                    # monotonic within the project
+status:            accepted                   # proposed | accepted | superseded | deprecated
+date:              "{{ISO_DATE}}"
+title:             "<short noun phrase>"
+governs_components: [<component-id>, ...]     # which COMPONENTS.yaml entries this ADR shapes
+supersedes:        null                       # ADR-id this one replaces, or null
+superseded_by:     null                       # ADR-id that replaces this one, or null
+traces_to:         []                         # optional: roadmap capability (CAP-NNN) or external constraint (EXT-NNN) ids that drove the decision
+---
+
+# {{TITLE}}
+
+## Context
+
+<!-- Cite the SPECIFIC driver: a REQ id, an NFR, an external constraint, an incident.
+     Not generic praise. If you cannot name a driver, the decision is either not
+     load-bearing or has not been thought through enough to record. -->
+
+## Decision
+
+<!-- One sentence stating what was chosen. Crisp. No reasoning here. -->
+
+## Alternatives
+
+<!-- At least two genuine alternatives, each with one paragraph of trade-off reasoning.
+     "Do nothing" qualifies only if it was a real contender, not a straw man. -->
+
+- **<Option A>** — <trade-off reasoning>
+- **<Option B>** — <trade-off reasoning>
+
+## Consequences
+
+### Positive
+
+- <Concrete consequence>
+
+### Negative
+
+- <Concrete consequence — at least one. If you cannot name a negative,
+  recheck whether the decision is real or just preferred terminology.>
+
+## Reversibility
+
+<!-- A real answer to "what would it take to undo this?". Two acceptable forms:
+       (a) a rollback path with cost — "To reverse: rewrite X (~N weeks), migrate data via Y";
+       (b) a named human authority — "Engineering Director would re-evaluate at the next
+           architectural review."
+     "Hard to reverse" without specifics is not an answer. -->

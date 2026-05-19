@@ -1,0 +1,91 @@
+# sprint.yaml — Sprint file with full task contracts
+# Produced by the Software Architect (/wf-skill-swa).
+# Consumed by /wf-skill-orchestrate (orchestrator reads this directly).
+
+sprint_id: ""
+goal: ""
+source_backlog_sprint: ""    # Which master_backlog sprint this was derived from
+created_at: ""
+
+tasks:
+  # Each task is a full contract inline — acceptance criteria, files_to_touch,
+  # testing mandate, dependencies. The pipeline reads these directly.
+  #
+  # - id: "S1.1"
+  #   title: "Task title"
+  #   status: "pending"            # pending | in_progress | done | blocked | escalated
+  #   component: "component-name"
+  #   depends_on: []
+  #   risk: "low"                  # low | medium | high
+  #
+  #   # ---- Spec-layer slice ----
+  #   # Verbatim copies from paths.components. Build and review agents read these
+  #   # slices instead of the full COMPONENTS.yaml.
+  #
+  #   # REQ(s) the task implements. Each entry is copied verbatim from
+  #   # components.<name>.requirements. Every acceptance_criterion below must
+  #   # trace back to one of these REQ ids (e.g., "AC-1 (REQ-AUTH-001): ...").
+  #   requirements_extract:
+  #     - id: REQ-XXX-001
+  #       statement: "When <trigger>, the system shall <observable behavior>."
+  #       acceptance_criteria:
+  #         - "Verifiable criterion 1."
+  #         - "Verifiable criterion 2."
+  #
+  #   # DbC block(s) the task implements or modifies. Copied verbatim from
+  #   # components.<name>.exposes. Omit the field entirely if the task touches
+  #   # no contract-bearing interface. When present, build agents derive test
+  #   # oracles from postconditions / typed_errors / invariants.
+  #   parent_interface:
+  #     - name: ModuleName.MethodName
+  #       preconditions:
+  #         - "Caller-side guarantee."
+  #       postconditions:
+  #         on_success:
+  #           - "Observable outcome on success."
+  #         on_TypedError:
+  #           - "Condition under which TypedError is returned."
+  #       typed_errors:
+  #         - { name: TypedError, when: "Condition." }
+  #       invariants:
+  #         - "Property that holds across all paths."
+  #       style: tolerant         # tolerant | strict
+  #
+  #   acceptance_criteria:
+  #     # Each AC must carry a (REQ-NNN) trace handle pointing into requirements_extract above.
+  #     - "AC-1 (REQ-XXX-001): When X happens, Y should result"
+  #
+  #   files_to_touch:
+  #     - "src/module/file.ts"
+  #     - "src/module/file.test.ts"
+  #
+  #   context_to_load:
+  #     - "docs/CONVENTIONS.md"
+  #     - "src/module/types.ts"
+  #
+  #   out_of_scope:
+  #     - "Do NOT modify the database schema"
+  #
+  #   testing_mandate:
+  #     # Each item carries `description` + `covers` (the AC id it validates).
+  #     # For tasks spanning 2+ functions/files, use the grouped format with a
+  #     # `target:` field and nested `tests:` — see wf-skill-swa/SKILL.md.
+  #     unit_tests:
+  #       - description: "Happy path: valid input returns expected output"
+  #         covers: "AC-1"
+  #       - description: "Error path: invalid input returns typed error"
+  #         covers: "AC-2"
+  #     integration_tests:
+  #       - description: "Round-trip through external dependency"
+  #         covers: "AC-1"
+  #     e2e_tests: []
+  #     # If integration_tests or e2e_tests are empty for a task that touches
+  #     # external deps or user-facing flows, add a justification comment here.
+  #
+  #   doc_updates_required:
+  #     - path: "docs/API.md"
+  #       action: "Add entry for new endpoint"
+  #       category: "codebase"
+  #
+  #   implementation_notes: |
+  #     Guidance for the developer.

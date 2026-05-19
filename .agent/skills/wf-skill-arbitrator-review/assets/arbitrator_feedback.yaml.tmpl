@@ -1,0 +1,49 @@
+# arbitrator_feedback.yaml — Spec-layer review rejection
+#
+# Written by: wf-skill-arbitrator-review when verdict is REJECTED
+# Lives at:   .workflow/.transient/arbitrator_feedback.yaml (paths.arbitrator_feedback)
+# Consumed by: wf-skill-sa in fix mode
+#
+# Severity rules:
+#   - block: single finding triggers REJECTED
+#   - warn:  accumulates; 3+ warns = REJECTED
+#
+# Retry cap: 3 attempts. After 3 consecutive REJECTED verdicts, the arbitrator
+# emits arbitrator_escalation.yaml with target_layer: human instead.
+
+verdict: REJECTED
+iteration: 1                              # bumped each fix-mode round; first review is 1
+reviewed_at: "{{ISO_TIMESTAMP}}"
+
+artifacts_reviewed:
+  - "<path to COMPONENTS.yaml>"
+  - "<path to docs/adrs/ directory>"
+
+findings:
+  - id: F-001
+    category: req-rigor                   # design-issue | comp-rigor | adr-rigor | cross-artifact | adr-threshold | meta-gate
+    severity: block                       # block | warn
+    artifact: "COMPONENTS.yaml"
+    field: "components.<name>.requirements[<i>]"
+    message: "<one-sentence finding>"
+    fix_hint: "<optional one-sentence hint pointing at the field to change>"
+
+  # - id: F-002
+  #   category: cross-artifact
+  #   severity: block
+  #   artifact: "docs/adrs/ADR-007.md"
+  #   field: "governs_components"
+  #   message: "ADR-007 governs_components lists 'auth' but auth.governed_by_adrs does not include ADR-007."
+  #   fix_hint: "Add ADR-007 to components.auth.governed_by_adrs (or remove from ADR-007.governs_components)."
+
+# Meta-findings (advisory only — do not count toward block/warn aggregation).
+# Use when the previous iteration's feedback was unclear and SA's fix didn't take.
+# meta_findings:
+#   - id: M-001
+#     affected_finding: F-201               # finding id from previous iteration
+#     message: "Previous finding was ambiguous about which field to change."
+
+summary:
+  blocks: 0
+  warns:  0
+  meta:   0

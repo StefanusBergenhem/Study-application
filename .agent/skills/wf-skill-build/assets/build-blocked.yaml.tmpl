@@ -1,0 +1,42 @@
+# build-blocked.yaml — Scope-Expansion HALT artifact
+#
+# Written by: wf-skill-build (loaded by the wf-build agent) immediately before halting on scope expansion
+# Read by:    wf-skill-orchestrate as the first artifact checked after every build sub-agent return
+# Deleted by: wf-skill-orchestrate after handling (whether amendment applied or escalation issued)
+#
+# Default path: paths.build_blocked (default .workflow/.transient/build-blocked.yaml)
+#
+# PURPOSE
+# -------
+# When the build discovers that a file outside files_to_touch must be modified in
+# order to compile or pass tests, it writes this artifact and halts. The orchestrator
+# decides:
+#   - If scope_amendment_count < review.max_scope_amendments (default 1) AND
+#     suggested_amendment looks reasonable → apply the amendment to current_task
+#     and re-dispatch (not a rejection retry; attempt counter unchanged).
+#   - Otherwise → escalate to the human with the artifact contents.
+# Either way, the orchestrator deletes this file after handling.
+
+task_id: "<task_id from current_task>"
+attempt: 1                              # Current attempt number (from pipeline_state.task_states)
+reason: scope_expansion_required        # Always this value for scope-expansion HALTs
+
+required_files:
+  - path: "<absolute or repo-relative path to the file that must be modified>"
+    why: "<one sentence — why this specific file must be modified to compile or pass tests>"
+  # Add one entry per additional out-of-scope file required.
+  # If multiple files are needed, list them all — the orchestrator amends files_to_touch for all.
+
+attempted_change: >
+  <One-paragraph description of what the build was trying to implement when it discovered
+  the boundary. Include: what feature/behavior was being implemented, what the out-of-scope
+  file contains that is needed, and why an alternative approach that stays within
+  files_to_touch is not viable.>
+
+suggested_amendment: >
+  <Optional but strongly recommended. Concrete proposal for how files_to_touch should be
+  amended to unblock the task. Example: "Add src/shared/types.ts to files_to_touch.
+  Only the SharedResult type export needs updating — no new logic in that file."
+  Leave as an empty string if no amendment can be suggested.>
+
+ts: "YYYY-MM-DDTHH:MM:SSZ"               # ISO-8601 timestamp when this artifact was written
