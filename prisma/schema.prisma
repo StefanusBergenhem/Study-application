@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model as defined in REQ-AUTH-006
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  password_hash String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  sessions   Session[]
+  cards      Card[]
+  libraries  Library[]
+  sr_states  SRState[]
+  api_tokens ApiToken[]
+  mind_maps  MindMap[]
+
+  @@map("users")
+}
+
+// Session model for authentication
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  token      String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  // Foreign key relation
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// Card model as defined in REQ-CRD-007
+model Card {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  front      String
+  back       String
+  image_urls String[] @default([])
+  active     Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Foreign key relation
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Relations
+  library_memberships LibraryMembership[]
+  sr_states           SRState[]
+
+  @@map("cards")
+}
+
+// Library model as defined in REQ-LIB-006
+model Library {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Foreign key relation
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Relations
+  memberships LibraryMembership[]
+
+  // Unique constraint on (user_id, name)
+  @@unique([user_id, name])
+  @@map("libraries")
+}
+
+// LibraryMembership junction table as defined in REQ-LIB-007
+model LibraryMembership {
+  library_id String   @db.Uuid
+  card_id    String   @db.Uuid
+  added_at   DateTime @default(now())
+
+  // Foreign key relations
+  library Library @relation(fields: [library_id], references: [id], onDelete: Cascade)
+  card    Card    @relation(fields: [card_id], references: [id], onDelete: Cascade)
+
+  // Unique constraint on (library_id, card_id)
+  @@unique([library_id, card_id])
+  @@map("library_memberships")
+}
+
+// SRState model as defined in REQ-STU-009
+model SRState {
+  user_id           String    @db.Uuid
+  card_id           String    @db.Uuid
+  ease_factor       Float     @default(2.5)
+  interval_days     Int       @default(1)
+  repetitions       Int       @default(0)
+  next_review_at    DateTime  @default(now())
+  last_reviewed_at  DateTime?
+  algorithm_version String    @default("SM-2")
+  review_history    Json      @default("[]")
+
+  // Foreign key relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [card_id], references: [id], onDelete: Cascade)
+
+  // Unique constraint on (user_id, card_id)
+  @@unique([user_id, card_id])
+  @@map("sr_states")
+}
+
+// ApiToken model as referenced in REQ-TKN-001
+model ApiToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  user_id      String    @db.Uuid
+  label        String
+  token_hash   String    @unique
+  created_at   DateTime  @default(now())
+  last_used_at DateTime?
+
+  // Foreign key relation - ON DELETE RESTRICT per AC-4
+  user User @relation(fields: [user_id], references: [id], onDelete: Restrict)
+
+  @@map("api_tokens")
+}
+
+// MindMap model as defined in REQ-MM-005
+model MindMap {
+  id         String   @id @default(uuid()) @db.Uuid
+  user_id    String   @db.Uuid
+  name       String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Foreign key relation
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  // Relations
+  nodes MindMapNode[]
+
+  @@map("mind_maps")
+}
+
+// MindMapNode model as defined in REQ-MM-005
+model MindMapNode {
+  id           String   @id @default(uuid()) @db.Uuid
+  map_id       String   @db.Uuid
+  node_type    String   @default("text")
+  x            Float
+  y            Float
+  text_content String
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // Foreign key relation
+  mind_map MindMap @relation(fields: [map_id], references: [id], onDelete: Cascade)
+
+  @@map("mind_map_nodes")
+}

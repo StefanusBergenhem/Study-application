@@ -24,7 +24,7 @@ Per-phase agents are dispatched via the available sub-agent tool with the `subag
 
 ### Build Phase (per-task, in worktree)
 Subagent: `wf-build`
-Model: `config.yaml → models.build` (default: `sonnet`)
+Model: `config.yaml → models.build` (default: `deepseek/deepseek-v4-flash`)
 
 **Required envelope field:** `worktree_root` — the absolute filesystem path to the worktree root for this task. MUST be included in every build dispatch. The build agent reads this before any file mutation to enforce path discipline (see `agents/wf-build.md` § Worktree Path Discipline).
 
@@ -44,7 +44,7 @@ Output artifacts (written by sub-agent to `<worktree_path>/.workflow/.transient/
 
 ### Review Phase (per-task, in worktree)
 Subagent: `wf-review`
-Model: `config.yaml → models.review` (default: `sonnet`)
+Model: `config.yaml → models.review` (default: `deepseek/deepseek-v4-flash`)
 
 **Required envelope field:** `worktree_root` — the absolute filesystem path to the worktree root for this task. MUST be included in every review dispatch. The review agent reads this before any file mutation to enforce path discipline (see `agents/wf-review.md` § Worktree Path Discipline). All `paths.<x>` references from `config.yaml` (including `paths.sprint`, `paths.memory`, `paths.state`, `paths.design_issues`) resolve to `<worktree_root>/<config_path>` — never to a path outside the worktree. State and memory updates that are intended to land on the sprint branch must be written inside the worktree so the merge carries them.
 
@@ -66,7 +66,7 @@ Output artifacts (written by sub-agent to `<worktree_path>/.workflow/.transient/
 ### E2E Fix Cycle (per-attempt, in worktree)
 Subagent for build: `wf-build`
 Subagent for review: `wf-review`
-Model: `config.yaml → models.build` (default: `sonnet`) for build, `config.yaml → models.review` (default: `sonnet`) for review
+Model: `config.yaml → models.build` (default: `deepseek/deepseek-v4-flash`) for build, `config.yaml → models.review` (default: `deepseek/deepseek-v4-flash`) for review
 
 Build dispatch prompt envelope (same as normal build, with synthetic task contract):
 - `config.yaml`
@@ -91,7 +91,7 @@ Output artifacts (written by sub-agent to `<worktree_path>/.workflow/.transient/
 
 ### Retrospective Phase
 Subagent: `wf-retrospective`
-Model: `config.yaml → models.retrospective` (default: `sonnet`)
+Model: `config.yaml → models.retrospective` (default: `deepseek/deepseek-v4-flash`)
 
 Prompt envelope:
 - `config.yaml`
