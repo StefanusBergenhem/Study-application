@@ -102,9 +102,9 @@ parallel:
   max_concurrent_tasks: 4
 
 models:
-  build: "sonnet"            # Model for build sub-agents (task contracts are tight, Sonnet suffices)
-  review: "sonnet"           # Model for review sub-agents (checklist-driven validation)
-  retrospective: "sonnet"    # Model for retrospective sub-agents
+  build: "deepseek/deepseek-v4-flash"            # Model for build sub-agents (task contracts are tight, deepseek/deepseek-v4-flash suffices)
+  review: "deepseek/deepseek-v4-flash"           # Model for review sub-agents (checklist-driven validation)
+  retrospective: "deepseek/deepseek-v4-flash"    # Model for retrospective sub-agents
 
 task_sizing:
   max_files_to_touch: 3
