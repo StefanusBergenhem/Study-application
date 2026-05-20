@@ -26,6 +26,12 @@ lessons:
 
   - id: 4
     category: architecture_signals
-    rule: "UI forms that call auth services should accept callbacks (onRegister/onLogin) instead of importing auth service directly. This keeps the ui component dependency-free on auth internals and enables unit testing with simple mock handlers without mocking the entire auth layer."
-    evidence: "S1.4 — RegisterForm and LoginForm accept onRegister/onLogin callbacks as props. Tests create inline mock handlers (createMockRegister, createMockLogin) that return controlled responses, verifying form behavior without importing auth service."
+    rule: "Extract route protection logic into a pure function (computeMiddlewareAction) that accepts a validateSession callback instead of coupling directly to Next.js middleware. This separates Edge-runtime orchestration from testable auth logic."
+    evidence: "S1.5 — auth-middleware.ts exports computeMiddlewareAction(pathname, sessionToken, validateSession) that returns {kind: 'redirect'|'pass'} actions. Unit tests inject mock validateSession functions without needing Next.js request objects."
+    confidence: 0.85
+
+  - id: 5
+    category: architecture_signals
+    rule: "NavBar component accepts session, loading, onLogout, and logoutError as props rather than importing AuthService directly. Follows the existing callback-prop pattern from S1.4 (RegisterForm/LoginForm), enabling unit testing with simple mock handlers."
+    evidence: "S1.5 — NavBar receives session: PublicUser | null, loading: boolean, onLogout: () => void, logoutError: string | null as props. Tests render with inline mock handlers and verify DOM output via @testing-library/react."
     confidence: 0.85

@@ -606,7 +606,7 @@ tasks:
   # ── S1.5: Navigation, logout, and route protection ────────────────────────
   - id: "S1.5"
     title: "Navigation, logout, and route protection"
-    status: "pending"
+    status: "done"
     component: "ui"
     depends_on: ["S1.3"]
     risk: "low"
