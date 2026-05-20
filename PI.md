@@ -9,6 +9,8 @@ A greenfield study application. Started with the wf toolkit for structured, skil
 This project uses the wf toolkit (skills-based workflow for pi).
 - `.workflow/config.yaml` — project configuration (commands, paths, tuning).
 
+* Use venv for python comands
+
 
 ## Architecture
 
