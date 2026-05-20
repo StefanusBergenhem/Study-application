@@ -23,3 +23,9 @@ lessons:
     rule: "Login anti-enumeration: when email is not found, still call bcrypt.compareSync with a dummy hash to maintain constant-ish timing vs the wrong-password path. Return the same generic error message from both paths."
     evidence: "S1.3 — AuthService.login calls bcrypt.compareSync(password, dummyHash) when user===null before throwing AuthInvalidCredentialsError."
     confidence: 0.9
+
+  - id: 4
+    category: architecture_signals
+    rule: "UI forms that call auth services should accept callbacks (onRegister/onLogin) instead of importing auth service directly. This keeps the ui component dependency-free on auth internals and enables unit testing with simple mock handlers without mocking the entire auth layer."
+    evidence: "S1.4 — RegisterForm and LoginForm accept onRegister/onLogin callbacks as props. Tests create inline mock handlers (createMockRegister, createMockLogin) that return controlled responses, verifying form behavior without importing auth service."
+    confidence: 0.85
