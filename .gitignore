@@ -1,2 +1,2 @@
 .workflow/.transient/
-.venv/
+.venv/node_modules/
