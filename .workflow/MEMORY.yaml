@@ -11,3 +11,15 @@ lessons:
     rule: "Define an AuthDb interface (injected dependency) to abstract Prisma/DB access for auth services, enabling unit tests without a real database while preserving the Prisma integration seam for integration tests."
     evidence: "S1.2 — AuthService.register injects AuthDb interface; unit tests mock it; production wraps Prisma."
     confidence: 0.85
+
+  - id: 2
+    category: architecture_signals
+    rule: "Extract Session model to its own file when it gains fields beyond token+expiresAt (id, userId, createdAt). Keep User model focused on user identity; Session is a distinct concept with its own lifecycle (created by login, consumed by validateSession/logout)."
+    evidence: "S1.3 — Session interface moved from user.model.ts to session.model.ts with expanded fields matching Prisma schema."
+    confidence: 0.8
+
+  - id: 3
+    category: security_patterns
+    rule: "Login anti-enumeration: when email is not found, still call bcrypt.compareSync with a dummy hash to maintain constant-ish timing vs the wrong-password path. Return the same generic error message from both paths."
+    evidence: "S1.3 — AuthService.login calls bcrypt.compareSync(password, dummyHash) when user===null before throwing AuthInvalidCredentialsError."
+    confidence: 0.9
