@@ -120,7 +120,7 @@ tasks:
   # ── S1.2: User registration ──────────────────────────────────────────────
   - id: "S1.2"
     title: "User registration with email + password"
-    status: "pending"
+    status: "done"
     component: "auth"
     depends_on: ["S1.1"]
     risk: "medium"

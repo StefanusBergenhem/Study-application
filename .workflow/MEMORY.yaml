@@ -5,4 +5,9 @@
 version: 1
 max_entries: 30
 
-lessons: []
+lessons:
+  - id: 1
+    category: architecture_signals
+    rule: "Define an AuthDb interface (injected dependency) to abstract Prisma/DB access for auth services, enabling unit tests without a real database while preserving the Prisma integration seam for integration tests."
+    evidence: "S1.2 — AuthService.register injects AuthDb interface; unit tests mock it; production wraps Prisma."
+    confidence: 0.85
