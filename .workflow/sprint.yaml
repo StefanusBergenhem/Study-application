@@ -463,7 +463,7 @@ tasks:
   # ── S1.4: Register and Login forms ────────────────────────────────────────
   - id: "S1.4"
     title: "Register and Login forms"
-    status: "pending"
+    status: "done"
     component: "ui"
     depends_on: ["S1.3"]
     risk: "low"
