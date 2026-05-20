@@ -635,6 +635,7 @@ tasks:
 
     files_to_touch:
       - "src/ui/nav-bar.tsx"
+      - "src/ui/nav-bar.css"
       - "src/ui/auth-middleware.ts"
       - "src/ui/nav-bar.test.tsx"
 
@@ -739,6 +740,14 @@ tasks:
       AuthService.validateSession per the dependency rules — do NOT import
       from database directly. The nav bar does NOT import form components
       from S1.4.
+
+      CSS styling: use a plain CSS file (src/ui/nav-bar.css) imported
+      directly into the nav-bar.tsx component. Follow the BEM class
+      naming already established in nav-bar.tsx. Use CSS custom
+      properties for responsive breakpoint values so touch-target
+      sizing (44×44px) and layout changes are maintainable. Next.js
+      supports plain CSS imports out of the box — no CSS Modules or
+      CSS-in-JS needed for this simple component.
 
       Do NOT create a full layout.tsx app shell — only the nav bar
       component. The layout wrapping can be done by the page structure
