@@ -278,7 +278,7 @@ tasks:
   # ── S1.3: Login and session management ────────────────────────────────────
   - id: "S1.3"
     title: "Login and session management"
-    status: "pending"
+    status: "done"
     component: "auth"
     depends_on: ["S1.2"]
     risk: "low"
