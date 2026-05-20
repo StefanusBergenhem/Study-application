@@ -1,0 +1,745 @@
+# sprint.yaml — Sprint file with full task contracts
+# Produced by the Software Architect (/wf-skill-swa).
+# Consumed by /wf-skill-orchestrate.
+
+sprint_id: "S1"
+goal: "Users can register and log in — foundational identity layer for all subsequent work."
+source_backlog_sprint: "S1"
+created_at: "2026-05-20T00:00:00Z"
+
+tasks:
+
+  # ── S1.1: Database schema ────────────────────────────────────────────────
+  - id: "S1.1"
+    title: "Database schema — User, Session, and core tables"
+    status: "pending"
+    component: "database"
+    depends_on: []
+    risk: "low"
+
+    requirements_extract:
+      - id: REQ-DB-001
+        type: functional
+        statement: "The system shall define a relational schema with tables for
+          User, Session, Card, Library, LibraryMembership, SRState, ApiToken,
+          MindMap, and MindMapNode. All foreign keys shall cascade deletes where
+          the child row is meaningless without the parent."
+        acceptance_criteria:
+          - "All tables listed exist in the schema."
+          - "FOREIGN KEY constraints on all inter-table references."
+          - "ON DELETE CASCADE: Session→User, LibraryMembership→Library, LibraryMembership→Card, MindMapNode→MindMap, SRState→Card."
+          - "ON DELETE RESTRICT (or no cascade): ApiToken→User (manual revocation)."
+
+    parent_interface:
+      - name: Schema
+      - name: PrismaClient
+
+    acceptance_criteria:
+      - "AC-1 (REQ-DB-001): All 10 tables (User, Session, Card, Library, LibraryMembership, SRState, ApiToken, MindMap, MindMapNode) exist in prisma/schema.prisma with complete column definitions."
+      - "AC-2 (REQ-DB-001): FOREIGN KEY constraints present on all inter-table references: Session.user_id→User, Card.user_id→User, Library.user_id→User, LibraryMembership.library_id→Library, LibraryMembership.card_id→Card, SRState.user_id→User, SRState.card_id→Card, ApiToken.user_id→User, MindMap.user_id→User, MindMapNode.map_id→MindMap."
+      - "AC-3 (REQ-DB-001): ON DELETE CASCADE on: Session→User, LibraryMembership→Library, LibraryMembership→Card, MindMapNode→MindMap, SRState→Card."
+      - "AC-4 (REQ-DB-001): ON DELETE RESTRICT (or no action) on ApiToken→User."
+      - "AC-5 (REQ-DB-001): Migration runs successfully up and down — up creates all tables, down drops all tables without error."
+
+    files_to_touch:
+      - "prisma/schema.prisma"
+
+    context_to_load:
+      - ".workflow/COMPONENTS.yaml"
+      - ".workflow/adrs/ADR-001-monolithic-deployment.md"
+      - ".workflow/adrs/ADR-002-tech-stack.md"
+
+    out_of_scope:
+      - "Do NOT create seed data or seed scripts."
+      - "Do NOT implement any service/API layer — schema definition only."
+      - "Do NOT create migration files manually — use Prisma Migrate."
+      - "Do NOT add database triggers, views, or stored procedures."
+      - "Do NOT configure Prisma datasource beyond the Railway Postgres connection string."
+
+    testing_mandate:
+      unit_tests: []
+        # Schema is declarative — unit tests are not applicable.
+      integration_tests:
+        - description: "Migration up creates all 10 tables with correct column names [integration-only]"
+          covers: "AC-1"
+        - description: "Session table: user_id column exists, is UUID type, is non-nullable [integration-only]"
+          covers: "AC-2"
+        - description: "User table: email column has UNIQUE constraint [integration-only]"
+          covers: "AC-2"
+        - description: "Migration down drops all tables without error [integration-only]"
+          covers: "AC-5"
+        - description: "Foreign key Session.user_id → User(id) ON DELETE CASCADE: deleting a User deletes their Sessions [integration-only]"
+          covers: "AC-3"
+        - description: "Foreign key ApiToken.user_id → User(id) ON DELETE RESTRICT: deleting a User with tokens raises a constraint error [integration-only]"
+          covers: "AC-4"
+      e2e_tests: []
+        # No user-facing flow — schema is infrastructure.
+
+    implementation_notes: |
+      This is the initial Prisma schema for a greenfield project (ADR-001:
+      monolithic Next.js deploy; ADR-002: TypeScript + Prisma + PostgreSQL).
+
+      Column definitions for core S1 tables follow the models declared in
+      COMPONENTS.yaml:
+        - REQ-AUTH-006 defines User: id UUID, email string unique,
+          password_hash string, created_at timestamp, updated_at timestamp.
+        - Session: id UUID, user_id UUID FK→User, token string unique,
+          expires_at timestamp, created_at timestamp.
+        - REQ-LIB-006 defines Library: id UUID, user_id UUID FK→User,
+          name string max 100, UNIQUE(user_id, name), created_at timestamp,
+          updated_at timestamp.
+        - REQ-LIB-007 defines LibraryMembership: library_id UUID FK→Library,
+          card_id UUID FK→Card, added_at timestamp,
+          UNIQUE(library_id, card_id).
+        - REQ-CRD-007 defines Card: id UUID, user_id UUID FK→User,
+          front string, back string, image_urls string[] (JSON), created_at
+          timestamp, updated_at timestamp.
+        - REQ-STU-009 defines SRState: user_id UUID FK→User, card_id UUID
+          FK→Card, ease_factor float default 2.5, interval_days int default 1,
+          repetitions int default 0, next_review_at timestamp default now(),
+          last_reviewed_at timestamp nullable, algorithm_version string,
+          review_history JSON, UNIQUE(user_id, card_id).
+        - REQ-TKN-001 implies ApiToken: id UUID, user_id UUID FK→User,
+          label string, token_hash string unique, created_at timestamp,
+          last_used_at timestamp nullable.
+        - REQ-MM-005 defines MindMap: id UUID, user_id UUID FK→User,
+          name string, created_at timestamp, updated_at timestamp.
+        - REQ-MM-005 defines MindMapNode: id UUID, map_id UUID FK→MindMap,
+          node_type string default 'text', x float, y float, text_content
+          string, created_at timestamp, updated_at timestamp.
+
+      Use Prisma Migrate for the initial migration. The datasource block
+      should reference a DATABASE_URL environment variable (Railway Postgres
+      connection string). This task matches the 'database' domain.
+
+      Per REQ-DB-001, cascade rules:
+        CASCADE: Session→User, LibraryMembership→Library,
+        LibraryMembership→Card, MindMapNode→MindMap, SRState→Card.
+        RESTRICT (no cascade): ApiToken→User.
+
+  # ── S1.2: User registration ──────────────────────────────────────────────
+  - id: "S1.2"
+    title: "User registration with email + password"
+    status: "done"
+    component: "auth"
+    depends_on: ["S1.1"]
+    risk: "medium"
+
+    requirements_extract:
+      - id: REQ-AUTH-001
+        type: functional
+        statement: "When given a valid email and password for a new account, the
+          system shall create a User record with a hashed password and return a
+          session."
+        acceptance_criteria:
+          - "Email not already registered → User created, password bcrypt/argon2-hashed, session established."
+          - "Email already registered → AuthDuplicateUserError, no new User, no session."
+          - "Email missing @ → AuthInvalidEmailError."
+          - "Password < 8 characters → AuthWeakPasswordError."
+
+      - id: REQ-AUTH-005
+        type: nfr
+        statement: "The system shall store passwords using a memory-hard hashing
+          algorithm (bcrypt with cost ≥ 12 or argon2id) and shall never log or
+          serialize plaintext passwords."
+        nfr_elements:
+          subject: "password storage security"
+          metric: "hashing algorithm and cost factor"
+          threshold: "bcrypt cost ≥ 12 OR argon2id with t=2, m=65536, p=1"
+          condition: "all password storage and verification paths"
+          source: "OWASP Password Storage Cheat Sheet"
+
+      - id: REQ-AUTH-006
+        type: data
+        statement: "The system shall define a canonical User model with fields:
+          id (UUID), email (string, unique), password_hash (string), created_at
+          (timestamp), updated_at (timestamp)."
+        acceptance_criteria:
+          - "User struct is defined once in src/auth/ and imported by every component needing user identity."
+          - "User is JSON-serialisable with stable camelCase field names."
+
+    parent_interface:
+      - name: AuthService.register
+        signature:
+          parameters:
+            - { name: email, type: string }
+            - { name: password, type: string }
+          return_type: "(User, Session, error)"
+        preconditions:
+          - "email is a non-empty string containing '@'."
+          - "password is a non-empty string of length ≥ 8."
+        postconditions:
+          on_success:
+            - "Returns a User with a newly-generated UUID id."
+            - "User.password_hash is a bcrypt/argon2id hash of the supplied password."
+            - "Session carries a cryptographically random token and an expiry."
+          on_AuthDuplicateUserError:
+            - "email is already registered; no new User or Session created."
+          on_AuthInvalidEmailError:
+            - "email does not contain '@'."
+          on_AuthWeakPasswordError:
+            - "password length < 8."
+        invariants: []
+        typed_errors:
+          - { name: AuthDuplicateUserError, when: "email is already registered." }
+          - { name: AuthInvalidEmailError, when: "email format is invalid (no '@')." }
+          - { name: AuthWeakPasswordError, when: "password length < 8 characters." }
+        style: tolerant
+
+    acceptance_criteria:
+      - "AC-1 (REQ-AUTH-001): Valid email + password ≥ 8 chars → User created with UUID id, password bcrypt/argon2-hashed (cost ≥ 12 or argon2id), session cookie set with cryptographically random token and expiry."
+      - "AC-2 (REQ-AUTH-001): Email already registered → AuthDuplicateUserError returned, no new User row, no session created."
+      - "AC-3 (REQ-AUTH-001): Email missing '@' → AuthInvalidEmailError returned, no User created, no session."
+      - "AC-4 (REQ-AUTH-001): Password < 8 characters → AuthWeakPasswordError returned, no User created, no session."
+      - "AC-5 (REQ-AUTH-005): Plaintext password never appears in logs, error messages, response bodies, or serialized User objects. password_hash field is the only stored representation."
+      - "AC-6 (REQ-AUTH-006): User type/interface exported from src/auth/ with fields: id (UUID string), email (string), created_at (ISO timestamp string), updated_at (ISO timestamp string). password_hash is NOT exposed in the serialized form. All field names use camelCase."
+
+    files_to_touch:
+      - "src/auth/user.model.ts"
+      - "src/auth/auth.service.ts"
+      - "src/auth/auth.service.test.ts"
+
+    context_to_load:
+      - ".workflow/COMPONENTS.yaml"
+      - ".workflow/adrs/ADR-001-monolithic-deployment.md"
+      - ".workflow/adrs/ADR-002-tech-stack.md"
+      - "prisma/schema.prisma"
+
+    out_of_scope:
+      - "Do NOT implement login or session validation (S1.3)."
+      - "Do NOT implement password reset (S2.1)."
+      - "Do NOT implement email verification or email sending."
+      - "Do NOT implement rate limiting or account lockout."
+      - "Do NOT create UI components, pages, or forms."
+      - "Do NOT implement token-based authentication (S13)."
+      - "Do NOT wire up Next.js route handlers directly — implement as a plain service that can be called from route handlers later."
+
+    testing_mandate:
+      unit_tests:
+        - target: "src/auth/auth.service.ts:register"
+          tests:
+            - description: "Valid email with '@' and password ≥ 8 chars returns User with UUID id and Session with non-empty token [positive]"
+              covers: "AC-1"
+            - description: "Created User.password_hash is not the plaintext password and verifies against the input password [positive]"
+              covers: "AC-5"
+            - description: "Email already registered returns AuthDuplicateUserError [negative]"
+              covers: "AC-2"
+            - description: "Email without '@' returns AuthInvalidEmailError [negative]"
+              covers: "AC-3"
+            - description: "Password of 7 characters returns AuthWeakPasswordError [boundary]"
+              covers: "AC-4"
+            - description: "Password of exactly 8 characters succeeds [boundary]"
+              covers: "AC-1"
+            - description: "Plaintext password is not present in error message or any serialized output [negative]"
+              covers: "AC-5"
+        - target: "src/auth/user.model.ts:User"
+          tests:
+            - description: "Serialized User object contains id, email, created_at, updated_at in camelCase and excludes password_hash [positive]"
+              covers: "AC-6"
+      integration_tests:
+        - description: "Register → read User from database via Prisma, verify password_hash is stored and email matches [integration-only]"
+          covers: "AC-1"
+        - description: "Register duplicate email → query database, verify exactly one User row exists for that email [integration-only]"
+          covers: "AC-2"
+      e2e_tests: []
+        # No user-facing UI in this task — e2e coverage lives in S1.4 (register form).
+
+    implementation_notes: |
+      Implements REQ-AUTH-001, REQ-AUTH-005, and REQ-AUTH-006 per
+      ADR-001 (monolithic deploy) and ADR-002 (TypeScript + Prisma).
+
+      Password hashing (REQ-AUTH-005): use bcrypt with cost factor ≥ 12 OR
+      argon2id. Do NOT use SHA-256, MD5, or any fast hash. The hash library
+      must be a well-known npm package (bcryptjs or @node-rs/argon2).
+
+      User model (REQ-AUTH-006): define in src/auth/user.model.ts as the
+      canonical location. Every other component imports User from here.
+      Export both the database-mapped type and a serializable "public" view
+      (without password_hash).
+
+      AuthService.register: follow the DbC contract in parent_interface.
+      Pre-validate inputs (email format, password length) before touching
+      the database. Check email uniqueness via Prisma query — rely on the
+      UNIQUE constraint as a safety net, not the primary check.
+
+      Session token generation: use crypto.randomUUID() or
+      crypto.randomBytes(32).toString('hex'). Set a reasonable expiry
+      (e.g., 7 days from creation).
+
+      Error handling: throw typed errors (AuthDuplicateUserError, etc.)
+      rather than returning generic Error. The caller distinguishes error
+      types programmatically.
+
+      This task matches the 'auth' domain. Do NOT create Next.js route
+      handlers — implement the service layer only. Route handlers will be
+      wired in a later task or by the UI component calling the service
+      directly via Server Actions.
+
+  # ── S1.3: Login and session management ────────────────────────────────────
+  - id: "S1.3"
+    title: "Login and session management"
+    status: "pending"
+    component: "auth"
+    depends_on: ["S1.2"]
+    risk: "low"
+
+    requirements_extract:
+      - id: REQ-AUTH-002
+        type: functional
+        statement: "When given an email and password for an existing account, the
+          system shall verify the password against the stored hash and return a
+          session on match; on mismatch or unknown email, the system shall return
+          a generic AuthInvalidCredentialsError with indistinguishable timing."
+        acceptance_criteria:
+          - "Correct password → session established, 200 OK."
+          - "Wrong password → AuthInvalidCredentialsError, no session."
+          - "Unknown email → AuthInvalidCredentialsError (same message and timing)."
+
+      - id: REQ-AUTH-003
+        type: functional
+        statement: "When given a valid session token, the system shall invalidate
+          the session so it can no longer authenticate requests."
+        acceptance_criteria:
+          - "Valid session token → session deleted, subsequent use returns AuthSessionExpiredError."
+          - "Already-expired or nonexistent token → no error (idempotent)."
+
+    parent_interface:
+      - name: AuthService.login
+        signature:
+          parameters:
+            - { name: email, type: string }
+            - { name: password, type: string }
+          return_type: "(User, Session, error)"
+        preconditions:
+          - "email is a non-empty string."
+          - "password is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns the User matching the supplied email."
+            - "Session is newly issued with a cryptographically random token."
+          on_AuthInvalidCredentialsError:
+            - "email is unknown OR password does not match stored hash."
+            - "Response timing is constant regardless of which condition triggered."
+        invariants: []
+        typed_errors:
+          - { name: AuthInvalidCredentialsError, when: "email unknown or password mismatch." }
+        style: tolerant
+
+      - name: AuthService.logout
+        signature:
+          parameters:
+            - { name: sessionToken, type: string }
+          return_type: void
+        style: tolerant
+
+      - name: AuthService.validateSession
+        signature:
+          parameters:
+            - { name: token, type: string }
+          return_type: "(User, error)"
+        preconditions:
+          - "token is a non-empty string."
+        postconditions:
+          on_success:
+            - "Returns the User whose active session matches the token."
+          on_AuthSessionExpiredError:
+            - "token is valid but past its expiry."
+          on_AuthSessionInvalidError:
+            - "token does not match any active session."
+        invariants: []
+        typed_errors:
+          - { name: AuthSessionExpiredError, when: "valid token past its expiry." }
+          - { name: AuthSessionInvalidError, when: "token does not match any active session." }
+        style: tolerant
+
+    acceptance_criteria:
+      - "AC-1 (REQ-AUTH-002): Correct email + password → returns User object and Session with cryptographically random token; Session row persisted with expiry."
+      - "AC-2 (REQ-AUTH-002): Wrong password for existing email → AuthInvalidCredentialsError returned, message 'Invalid email or password', no session created."
+      - "AC-3 (REQ-AUTH-002): Unknown email → AuthInvalidCredentialsError returned, same message 'Invalid email or password' as wrong-password case, timing indistinguishable."
+      - "AC-4 (REQ-AUTH-003): Valid session token passed to logout → Session row deleted, subsequent validateSession with that token returns AuthSessionExpiredError."
+      - "AC-5 (REQ-AUTH-003): Already-expired or nonexistent token passed to logout → no error (idempotent, void return)."
+      - "AC-6 (REQ-AUTH-002): validateSession with valid non-expired token → returns the User associated with the session."
+      - "AC-7 (REQ-AUTH-002): User serialized from validateSession does NOT include password_hash field."
+
+    files_to_touch:
+      - "src/auth/session.model.ts"
+      - "src/auth/auth.service.ts"
+      - "src/auth/auth.service.test.ts"
+
+    context_to_load:
+      - ".workflow/COMPONENTS.yaml"
+      - ".workflow/adrs/ADR-001-monolithic-deployment.md"
+      - ".workflow/adrs/ADR-002-tech-stack.md"
+      - "src/auth/user.model.ts"
+      - "prisma/schema.prisma"
+
+    out_of_scope:
+      - "Do NOT implement password reset (S2.1)."
+      - "Do NOT implement token-based authentication (S13)."
+      - "Do NOT create UI components, pages, or forms."
+      - "Do NOT implement session middleware or route protection (S1.5 handles Next.js middleware)."
+      - "Do NOT implement remember-me or persistent sessions."
+      - "Do NOT implement rate limiting or brute-force protection."
+      - "Do NOT modify the User model or registration logic from S1.2."
+
+    testing_mandate:
+      unit_tests:
+        - target: "src/auth/auth.service.ts:login"
+          tests:
+            - description: "Correct email + password returns User with matching email and Session with non-empty token [positive]"
+              covers: "AC-1"
+            - description: "Wrong password for existing email returns AuthInvalidCredentialsError with generic message [negative]"
+              covers: "AC-2"
+            - description: "Unknown email returns AuthInvalidCredentialsError with same message as wrong-password case [negative]"
+              covers: "AC-3"
+            - description: "Serialized User from login response excludes password_hash [positive]"
+              covers: "AC-7"
+        - target: "src/auth/auth.service.ts:logout"
+          tests:
+            - description: "Valid session token → subsequent validateSession returns AuthSessionExpiredError [positive]"
+              covers: "AC-4"
+            - description: "Logout with nonexistent token → no error, void return [positive]"
+              covers: "AC-5"
+            - description: "Double logout (same token twice) → second call idempotent, no error [boundary]"
+              covers: "AC-5"
+        - target: "src/auth/auth.service.ts:validateSession"
+          tests:
+            - description: "Valid non-expired token returns User with matching id [positive]"
+              covers: "AC-6"
+            - description: "Expired token returns AuthSessionExpiredError [negative]"
+              covers: "AC-4"
+            - description: "Nonexistent/garbage token returns AuthSessionInvalidError [negative]"
+              covers: "AC-4"
+        - target: "src/auth/session.model.ts:Session"
+          tests:
+            - description: "Session type includes id, user_id, token, expires_at, created_at fields with correct types [positive]"
+              covers: "AC-1"
+      integration_tests:
+        - description: "Login with valid credentials → query database, verify Session row exists with correct user_id and non-null token [integration-only]"
+          covers: "AC-1"
+        - description: "Login with wrong password → query database, verify no new Session row created [integration-only]"
+          covers: "AC-2"
+        - description: "Logout valid session → query database, verify Session row deleted [integration-only]"
+          covers: "AC-4"
+        - description: "validateSession with valid token → verify returned User matches the session owner [integration-only]"
+          covers: "AC-6"
+      e2e_tests: []
+        # No user-facing UI in this task — e2e coverage lives in S1.4 (login form) and S1.5 (nav).
+
+    implementation_notes: |
+      Implements REQ-AUTH-002 and REQ-AUTH-003 per ADR-001 and ADR-002.
+      Extends the AuthService created in S1.2 — add login, logout, and
+      validateSession methods to the existing file.
+
+      Session model: define in src/auth/session.model.ts. Fields: id UUID,
+      user_id UUID (FK→User), token string (unique, cryptographically
+      random), expires_at timestamp, created_at timestamp.
+
+      login(): Look up User by email. Use the same password verification
+      as S1.2 (bcrypt.compare or argon2.verify). CRITICAL: unknown-email
+      and wrong-password paths MUST use constant-time comparison and return
+      identical error messages to prevent user enumeration. Do NOT
+      short-circuit on unknown email with a faster response.
+
+      logout(): DELETE the Session row by token. Idempotent — no error if
+      the session doesn't exist (already expired, already logged out, or
+      garbage token). Return void.
+
+      validateSession(): Look up Session by token. If not found →
+      AuthSessionInvalidError. If found but expires_at < now →
+      AuthSessionExpiredError (delete the expired row as cleanup, then
+      return the error). If valid → return the associated User (without
+      password_hash).
+
+      Token format: use the same generation approach as S1.2
+      (crypto.randomUUID or crypto.randomBytes). Do NOT use the session
+      token as a database primary key — use a separate UUID id.
+
+      This task modifies src/auth/auth.service.ts and
+      src/auth/auth.service.test.ts which were created in S1.2. Add new
+      methods and test blocks without removing or restructuring S1.2
+      functionality.
+
+  # ── S1.4: Register and Login forms ────────────────────────────────────────
+  - id: "S1.4"
+    title: "Register and Login forms"
+    status: "pending"
+    component: "ui"
+    depends_on: ["S1.3"]
+    risk: "low"
+
+    requirements_extract:
+      - id: REQ-UI-001
+        type: nfr
+        statement: "While rendering any screen, the system shall present legible
+          content without horizontal scroll on viewports from 320px to 2560px
+          wide, with interactive touch targets at least 44×44 CSS pixels on
+          viewports ≤ 768px wide."
+        nfr_elements:
+          subject: "UI responsiveness"
+          metric: "CSS pixels"
+          threshold: "touch targets ≥ 44×44px on viewport ≤ 768px; no horizontal scroll at ≥ 320px"
+          condition: "all screens"
+          source: "WCAG 2.1 + phone-first constraint"
+
+    acceptance_criteria:
+      - "AC-1 (REQ-AUTH-001): Register form with email and password fields, client-side validation (email format, password ≥ 8 chars), error messages displayed inline per field on validation failure."
+      - "AC-2 (REQ-AUTH-001): Successful registration submission → calls AuthService.register, on success redirects to login page with a confirmation message, on AuthDuplicateUserError displays 'Email already registered'."
+      - "AC-3 (REQ-AUTH-002): Login form with email and password fields, on submit calls AuthService.login, on success redirects to home/dashboard and sets session cookie."
+      - "AC-4 (REQ-AUTH-002): Login failure → displays 'Invalid email or password' (generic, same for wrong password and unknown email)."
+      - "AC-5 (REQ-UI-001): Both forms render without horizontal scroll at 320px viewport width; all submit buttons, input fields, and interactive elements are at least 44×44 CSS pixels on viewports ≤ 768px."
+      - "AC-6 (REQ-AUTH-001): Register form password field has a show/hide toggle (or equivalent) so the user can verify their input."
+      - "AC-7 (REQ-AUTH-001): Register form disables the submit button during submission to prevent double-submit."
+
+    files_to_touch:
+      - "src/ui/register-form.tsx"
+      - "src/ui/login-form.tsx"
+      - "src/ui/auth-forms.test.tsx"
+
+    context_to_load:
+      - ".workflow/COMPONENTS.yaml"
+      - ".workflow/adrs/ADR-001-monolithic-deployment.md"
+      - ".workflow/adrs/ADR-002-tech-stack.md"
+      - "src/auth/auth.service.ts"
+      - "src/auth/user.model.ts"
+
+    out_of_scope:
+      - "Do NOT implement session-aware navigation or logout button (S1.5)."
+      - "Do NOT implement password reset UI (S2.3)."
+      - "Do NOT implement social login (Google, GitHub, etc.)."
+      - "Do NOT implement 'remember me' checkbox."
+      - "Do NOT implement route protection middleware."
+      - "Do NOT style beyond basic functional layout — visual design is a separate concern."
+      - "Do NOT create layout or app-shell components."
+
+    testing_mandate:
+      unit_tests:
+        - target: "src/ui/register-form.tsx"
+          tests:
+            - description: "Renders email and password fields with labels and a submit button [positive]"
+              covers: "AC-1"
+            - description: "Submits valid email + password ≥ 8 chars, calls register service, redirects on success [positive]"
+              covers: "AC-2"
+            - description: "Empty email → displays inline error 'Email is required', form not submitted [negative]"
+              covers: "AC-1"
+            - description: "Email missing '@' → displays inline error 'Invalid email format', form not submitted [negative]"
+              covers: "AC-1"
+            - description: "Password < 8 chars → displays inline error 'Password must be at least 8 characters', form not submitted [boundary]"
+              covers: "AC-1"
+            - description: "Password of exactly 8 chars → validation passes (no password-too-short error) [boundary]"
+              covers: "AC-1"
+            - description: "Register service returns AuthDuplicateUserError → displays 'Email already registered' error [negative]"
+              covers: "AC-2"
+            - description: "Submit button is disabled while request is in-flight [positive]"
+              covers: "AC-7"
+            - description: "Password field has a visibility toggle that switches between masked and plaintext [positive]"
+              covers: "AC-6"
+        - target: "src/ui/login-form.tsx"
+          tests:
+            - description: "Renders email and password fields with labels and a submit button [positive]"
+              covers: "AC-3"
+            - description: "Submits valid credentials, calls login service, redirects on success [positive]"
+              covers: "AC-3"
+            - description: "Login service returns AuthInvalidCredentialsError → displays 'Invalid email or password' [negative]"
+              covers: "AC-4"
+            - description: "Empty email → displays inline error, form not submitted [negative]"
+              covers: "AC-3"
+            - description: "Empty password → displays inline error, form not submitted [negative]"
+              covers: "AC-3"
+      integration_tests: []
+        # Forms call the auth service directly (in-process in monolithic deploy
+        # per ADR-001). The auth service integration is tested in S1.2/S1.3.
+        # Form submission tests use a mocked auth service.
+      e2e_tests:
+        - description: "Register form: fill email + password, submit, verify redirect to login page with confirmation message [e2e]"
+          covers: "AC-2"
+        - description: "Register form: fill existing email, submit, verify 'Email already registered' error displayed [e2e]"
+          covers: "AC-2"
+        - description: "Login form: fill valid credentials, submit, verify redirect to home/dashboard [e2e]"
+          covers: "AC-3"
+        - description: "Login form: fill wrong password, submit, verify 'Invalid email or password' error displayed [e2e]"
+          covers: "AC-4"
+        - description: "Both forms render at 320px viewport without horizontal scroll; all buttons ≥ 44×44 CSS pixels at 375px [e2e]"
+          covers: "AC-5"
+
+    implementation_notes: |
+      Implements the register and login form UI per ADR-001 (monolithic
+      Next.js) and ADR-002 (TypeScript, Next.js App Router).
+
+      Both forms are client components ('use client') that call
+      AuthService.register and AuthService.login via Server Actions.
+      The forms live in src/ui/ as standalone components — do NOT create
+      Next.js page files in this task; page routing is a thin wrapper
+      around these components that can be added later or as part of the
+      page structure.
+
+      Each form handles its own state: email, password, loading, error
+      messages. Validate on submit (not on every keystroke) to avoid
+      noisy error messages. Display inline field-level errors for
+      client-side validation failures; display a form-level error for
+      server-returned errors (duplicate email, invalid credentials).
+
+      Password field: include a show/hide toggle button (eye icon or
+      text). The toggle must NOT submit the form. Use
+      type="password"/"text" switching.
+
+      Double-submit prevention: disable the submit button and show a
+      loading indicator while the Server Action is pending. Use
+      useFormStatus or React 19's useActionState.
+
+      Accessibility: all inputs have associated <label> elements.
+      Error messages use aria-describedby linking to the input.
+
+      Responsive (REQ-UI-001): both forms use a single-column layout
+      with max-width constraint (e.g., 400px). All touch targets (inputs,
+      buttons, toggle) are ≥ 44×44 CSS pixels. Test at 320px width.
+
+      This task matches the 'ui' component. Forms call auth component
+      services per the dependency rules — do NOT import from database
+      directly.
+
+      Server Actions: define the register and login actions as 'use server'
+      functions that import and call AuthService.register / AuthService.login.
+      These can be co-located with the form components or in a shared
+      actions file within src/ui/.
+
+  # ── S1.5: Navigation, logout, and route protection ────────────────────────
+  - id: "S1.5"
+    title: "Navigation, logout, and route protection"
+    status: "pending"
+    component: "ui"
+    depends_on: ["S1.3"]
+    risk: "low"
+
+    requirements_extract:
+      - id: REQ-UI-001
+        type: nfr
+        statement: "While rendering any screen, the system shall present legible
+          content without horizontal scroll on viewports from 320px to 2560px
+          wide, with interactive touch targets at least 44×44 CSS pixels on
+          viewports ≤ 768px wide."
+        nfr_elements:
+          subject: "UI responsiveness"
+          metric: "CSS pixels"
+          threshold: "touch targets ≥ 44×44px on viewport ≤ 768px; no horizontal scroll at ≥ 320px"
+          condition: "all screens"
+          source: "WCAG 2.1 + phone-first constraint"
+
+    acceptance_criteria:
+      - "AC-1 (REQ-AUTH-002): When no valid session exists, the nav bar displays 'Register' and 'Login' links; when a valid session exists, it displays the user's email and a 'Logout' button."
+      - "AC-2 (REQ-AUTH-003): Clicking 'Logout' calls AuthService.logout with the current session token, clears the session cookie, and re-renders the nav bar showing 'Register' and 'Login' links."
+      - "AC-3 (REQ-AUTH-002): Protected routes (any page requiring authentication) redirect unauthenticated visitors to the login page."
+      - "AC-4 (REQ-AUTH-002): Authenticated visitors accessing the login or register page are redirected to the home/dashboard page."
+      - "AC-5 (REQ-UI-001): Nav bar renders without horizontal scroll at 320px; Logout button and all nav links are ≥ 44×44 CSS pixels on viewports ≤ 768px."
+      - "AC-6 (REQ-AUTH-002): The nav bar does NOT flash the unauthenticated state before resolving the session (no layout shift / flash of wrong content)."
+
+    files_to_touch:
+      - "src/ui/nav-bar.tsx"
+      - "src/ui/auth-middleware.ts"
+      - "src/ui/nav-bar.test.tsx"
+
+    context_to_load:
+      - ".workflow/COMPONENTS.yaml"
+      - ".workflow/adrs/ADR-001-monolithic-deployment.md"
+      - ".workflow/adrs/ADR-002-tech-stack.md"
+      - "src/auth/auth.service.ts"
+      - "src/auth/user.model.ts"
+
+    out_of_scope:
+      - "Do NOT implement the register or login forms (S1.4)."
+      - "Do NOT implement user settings or profile pages."
+      - "Do NOT implement admin-only navigation items."
+      - "Do NOT implement breadcrumbs or secondary navigation."
+      - "Do NOT implement dark mode / theme toggle."
+      - "Do NOT implement the full app layout shell — only the nav bar component and auth middleware."
+
+    testing_mandate:
+      unit_tests:
+        - target: "src/ui/nav-bar.tsx"
+          tests:
+            - description: "No session → renders Register link and Login link, no Logout button, no user email [positive]"
+              covers: "AC-1"
+            - description: "Valid session → renders user email and Logout button, no Register/Login links [positive]"
+              covers: "AC-1"
+            - description: "Click Logout → calls AuthService.logout with current session token, clears cookie, nav re-renders unauthenticated [positive]"
+              covers: "AC-2"
+            - description: "Logout request fails → error is surfaced to the user (toast or inline message), nav state unchanged [negative]"
+              covers: "AC-2"
+            - description: "Session loads asynchronously — nav shows a loading skeleton/spinner, not the unauthenticated view [positive]"
+              covers: "AC-6"
+        - target: "src/ui/auth-middleware.ts"
+          tests:
+            - description: "Unauthenticated request to protected route → redirects to /login with return URL [positive]"
+              covers: "AC-3"
+            - description: "Authenticated request to protected route → passes through, no redirect [positive]"
+              covers: "AC-3"
+            - description: "Authenticated request to /login or /register → redirects to / [positive]"
+              covers: "AC-4"
+            - description: "Unauthenticated request to public route (e.g., /login, /register) → passes through, no redirect [positive]"
+              covers: "AC-4"
+            - description: "Request with expired session token → treated as unauthenticated, redirects to /login [negative]"
+              covers: "AC-3"
+      integration_tests: []
+        # Nav bar and middleware call auth service in-process (monolithic
+        # deploy per ADR-001). Auth service integration tested in S1.2/S1.3.
+      e2e_tests:
+        - description: "Visit / when unauthenticated → redirected to /login [e2e]"
+          covers: "AC-3"
+        - description: "Login, then visit / → nav bar shows user email and Logout button [e2e]"
+          covers: "AC-1"
+        - description: "Click Logout → nav bar shows Register and Login links, visiting / redirects to /login [e2e]"
+          covers: "AC-2"
+        - description: "Authenticated user visits /login → redirected to / [e2e]"
+          covers: "AC-4"
+        - description: "Nav bar renders at 320px viewport with all touch targets ≥ 44×44 CSS pixels [e2e]"
+          covers: "AC-5"
+
+    implementation_notes: |
+      Implements session-aware navigation and route protection per
+      ADR-001 (monolithic Next.js) and ADR-002 (TypeScript, App Router).
+
+      Nav bar (src/ui/nav-bar.tsx): a client component that reads the
+      session state. On mount, it calls a server action or API endpoint
+      that invokes AuthService.validateSession with the session cookie.
+      Based on the result, it renders either the authenticated view
+      (user email + Logout button) or the unauthenticated view
+      (Register + Login links).
+
+      Loading state: while the session check is in-flight, render a
+      minimal placeholder (e.g., a thin bar with a skeleton/spinner).
+      Do NOT render the unauthenticated links as the default — this
+      causes a visible flash when the session resolves as authenticated
+      (AC-6).
+
+      Logout: a server action that calls AuthService.logout with the
+      current session token, clears the session cookie, and triggers
+      a client-side re-render. If the server action throws, display the
+      error inline or via toast — do NOT silently fail.
+
+      Auth middleware (src/ui/auth-middleware.ts): Next.js middleware
+      (Edge runtime) that runs on every request. It reads the session
+      cookie, calls AuthService.validateSession, and:
+        - Protected routes: redirect to /login if unauthenticated.
+        - Auth pages (/login, /register): redirect to / if authenticated.
+        - Public routes (any unlisted): pass through.
+
+      Define protected routes as a configurable list (e.g., ['/', '/dashboard']).
+      Use Next.js middleware matcher to avoid running on static assets,
+      API routes, and _next paths.
+
+      Cookie handling: the session token should be stored in an httpOnly,
+      Secure, SameSite=Lax cookie. Set the cookie in the login Server Action
+      (S1.4) and clear it in the logout Server Action (this task).
+
+      Responsive (REQ-UI-001): nav bar collapses or stacks vertically on
+      narrow viewports. All links and the Logout button are ≥ 44×44 CSS
+      pixels.
+
+      This task matches the 'ui' component. The middleware calls
+      AuthService.validateSession per the dependency rules — do NOT import
+      from database directly. The nav bar does NOT import form components
+      from S1.4.
+
+      Do NOT create a full layout.tsx app shell — only the nav bar
+      component. The layout wrapping can be done by the page structure
+      that consumes these components.
